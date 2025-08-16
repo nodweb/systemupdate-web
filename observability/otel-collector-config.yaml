@@ -4,6 +4,19 @@ receivers:
       http:
       grpc:
 
+connectors:
+  spanmetrics:
+    dimensions:
+      - service.name
+      - status_code
+      - http.method
+      - http.route
+      - http.status_code
+    namespace: traces_spanmetrics
+    histogram:
+      explicit:
+        buckets: [1ms, 2ms, 5ms, 10ms, 20ms, 50ms, 100ms, 200ms, 500ms, 1s, 2s, 5s]
+
 extensions:
   health_check:
     endpoint: 0.0.0.0:13133
@@ -26,9 +39,9 @@ service:
   pipelines:
     traces:
       receivers: [otlp]
-      exporters: [logging, otlp/tempo]
+      exporters: [logging, otlp/tempo, spanmetrics]
     metrics:
-      receivers: [otlp]
+      receivers: [otlp, spanmetrics]
       exporters: [prometheus]
     logs:
       receivers: [otlp]

@@ -1,0 +1,72 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "graphTooltip": 0,
+  "links": [],
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Total RPS (5m)",
+      "gridPos": {"h": 5, "w": 6, "x": 0, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "sum(rate(traces_spanmetrics_calls_total[5m]))", "refId": "A"}]
+    },
+    {
+      "type": "stat",
+      "title": "Global Error Rate (5m)",
+      "gridPos": {"h": 5, "w": 6, "x": 6, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "percentunit"}},
+      "targets": [
+        {"expr": "sum(rate(traces_spanmetrics_calls_total{status_code!=\"STATUS_CODE_OK\"}[5m])) / sum(rate(traces_spanmetrics_calls_total[5m]))", "refId": "A"}
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "RPS by Service (5m)",
+      "gridPos": {"h": 9, "w": 12, "x": 12, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"expr": "sum by(service_name)(rate(traces_spanmetrics_calls_total[5m]))", "legendFormat": "{{service_name}}", "refId": "A"}
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "p95 Latency by Service (ms)",
+      "gridPos": {"h": 9, "w": 12, "x": 0, "y": 5},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "ms"}},
+      "targets": [
+        {"expr": "histogram_quantile(0.95, sum by (le, service_name) (rate(traces_spanmetrics_duration_milliseconds_bucket[5m])))", "legendFormat": "{{service_name}}", "refId": "A"}
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Error Rate by Service (5m)",
+      "gridPos": {"h": 9, "w": 12, "x": 12, "y": 9},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "percentunit"}},
+      "targets": [
+        {"expr": "sum by(service_name)(rate(traces_spanmetrics_calls_total{status_code!=\"STATUS_CODE_OK\"}[5m])) / sum by(service_name)(rate(traces_spanmetrics_calls_total[5m]))", "legendFormat": "{{service_name}}", "refId": "A"}
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "p95 Latency by Route (ms)",
+      "gridPos": {"h": 9, "w": 24, "x": 0, "y": 18},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "ms"}},
+      "targets": [
+        {"expr": "histogram_quantile(0.95, sum by (le, service_name, http_route) (rate(traces_spanmetrics_duration_milliseconds_bucket[5m])))", "legendFormat": "{{service_name}} {{http_route}}", "refId": "A"}
+      ]
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": ["systemupdate", "latency", "error-rate"],
+  "templating": {"list": []},
+  "time": {"from": "now-6h", "to": "now"},
+  "title": "Service Latency & Error Rate",
+  "uid": "svc-latency-error"
+}
