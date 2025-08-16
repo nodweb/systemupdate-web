@@ -1,0 +1,4 @@
+# file: C:\Users\UC\AndroidStudioProjects\SystemUpdate\systemupdate-web\services\device-service\app\main.py
+# hypothesis_version: 6.138.0
+
+[201, 204, 404, '/api/devices', '/healthz', '0.1.0', 'device not found', 'device-service', 'ok']

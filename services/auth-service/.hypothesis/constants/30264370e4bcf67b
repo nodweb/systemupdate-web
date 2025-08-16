@@ -1,0 +1,4 @@
+# file: C:\Users\UC\AndroidStudioProjects\SystemUpdate\systemupdate-web\services\auth-service\app\otel.py
+# hypothesis_version: 6.138.0
+
+['1', 'OTEL_SERVICE_NAME', 'OTEL_TRACES_ENABLE', 'auth-service', 'http://', 'service.name']

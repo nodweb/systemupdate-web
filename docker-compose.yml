@@ -36,11 +36,29 @@ services:
       ALLOW_ANONYMOUS_LOGIN: "yes"
     ports:
       - "2181:2181"
-    healthcheck:
-      test: ["CMD-SHELL", "echo ruok | nc -w 2 localhost 2181 | grep imok"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
+
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    container_name: su-prometheus
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    depends_on:
+      otel-collector:
+        condition: service_started
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    container_name: su-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    ports:
+      - "3000:3000"
+    depends_on:
+      prometheus:
+        condition: service_started
 
   kafka:
     image: bitnami/kafka:3.7
@@ -51,7 +69,7 @@ services:
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
     depends_on:
       zookeeper:
-        condition: service_healthy
+        condition: service_started
     ports:
       - "9092:9092"
     healthcheck:
@@ -141,6 +159,13 @@ services:
     container_name: su-command
     environment:
       PORT: 8004
+      KAFKA_BOOTSTRAP: kafka:9092
+      COMMAND_EVENTS_TOPIC: command.events
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: systemupdate
+      POSTGRES_PASSWORD: systemupdate
+      POSTGRES_DB: systemupdate
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8004"]
     ports:
       - "8004:8004"
@@ -156,6 +181,8 @@ services:
     container_name: su-data-ingest
     environment:
       PORT: 8005
+      KAFKA_BOOTSTRAP: kafka:9092
+      INGEST_TOPIC: device.ingest.raw
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8005"]
     ports:
       - "8005:8005"
@@ -184,6 +211,21 @@ services:
 #  gateway:
 #    image: kong:3.6
 #    # Configure declarative config and DB-less mode in M1
+
+  otel-collector:
+    image: otel/opentelemetry-collector:0.95.0
+    container_name: su-otel-collector
+    volumes:
+      - ./observability/otel-collector-config.yaml:/etc/otel/config.yaml:ro
+    command: ["--config", "/etc/otel/config.yaml"]
+    ports:
+      - "4317:4317"  # OTLP/gRPC
+      - "4318:4318"  # OTLP/HTTP
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:13133/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
 
 volumes:
   pgdata:

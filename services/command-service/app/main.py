@@ -2,7 +2,7 @@ import os
 import asyncio
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
-from typing import List, Dict
+from typing import List, Dict, Optional
 from datetime import datetime, timezone
 import uuid
 
@@ -60,11 +60,18 @@ OUTBOX: asyncio.Queue = asyncio.Queue()
 KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "kafka:9092")
 KAFKA_TOPIC = os.getenv("COMMAND_EVENTS_TOPIC", "command.events")
 publisher_task: asyncio.Task | None = None
+db_pool = None  # psycopg async pool
 
 try:
     from aiokafka import AIOKafkaProducer
 except Exception:
     AIOKafkaProducer = None  # type: ignore
+
+try:
+    import psycopg
+    from psycopg.rows import dict_row
+except Exception:
+    psycopg = None  # type: ignore
 
 
 @app.post("/commands", response_model=Command, status_code=201)
@@ -73,28 +80,62 @@ async def create_command(body: CommandCreate):
         cid = f"cmd-{uuid.uuid4().hex[:8]}"
         now = datetime.now(timezone.utc).isoformat()
         cmd = Command(id=cid, device_id=body.device_id, name=body.name, payload=body.payload, created_at=now)
-        COMMANDS[cid] = cmd
-        # enqueue event for publisher
-        await OUTBOX.put({
-            "type": "command.created",
-            "id": cid,
-            "device_id": body.device_id,
-            "name": body.name,
-            "payload": body.payload,
-            "created_at": now,
-        })
+        # persist if DB available, else in-memory fallback
+        if db_pool is not None:
+            async with db_pool.connection() as aconn:  # type: ignore
+                async with aconn.cursor() as cur:
+                    await cur.execute(
+                        """
+                        insert into commands(id, device_id, name, payload, created_at, status)
+                        values (%s, %s, %s, %s, %s, %s)
+                        on conflict (id) do nothing
+                        """,
+                        (cid, body.device_id, body.name, body.payload, now, "queued"),
+                    )
+                    await cur.execute(
+                        """
+                        insert into outbox(kind, aggregate_id, payload)
+                        values (%s, %s, %s)
+                        """,
+                        ("command.created", cid, {"id": cid, "device_id": body.device_id, "name": body.name, "payload": body.payload, "created_at": now}),
+                    )
+                    await aconn.commit()
+        else:
+            COMMANDS[cid] = cmd
+            await OUTBOX.put({
+                "type": "command.created",
+                "id": cid,
+                "device_id": body.device_id,
+                "name": body.name,
+                "payload": body.payload,
+                "created_at": now,
+            })
         return cmd
 
 
 @app.get("/commands", response_model=List[Command])
 async def list_commands():
     with tracer.start_as_current_span("list_commands"):
+        if db_pool is not None:
+            async with db_pool.connection() as aconn:  # type: ignore
+                async with aconn.cursor(row_factory=dict_row) as cur:
+                    await cur.execute("select id, device_id, name, payload, created_at, status from commands order by created_at desc limit 200")
+                    rows = await cur.fetchall()
+                    return rows
         return list(COMMANDS.values())
 
 
 @app.get("/commands/{command_id}", response_model=Command)
 async def get_command(command_id: str):
     with tracer.start_as_current_span("get_command"):
+        if db_pool is not None:
+            async with db_pool.connection() as aconn:  # type: ignore
+                async with aconn.cursor(row_factory=dict_row) as cur:
+                    await cur.execute("select id, device_id, name, payload, created_at, status from commands where id=%s", (command_id,))
+                    row = await cur.fetchone()
+                    if not row:
+                        raise HTTPException(status_code=404, detail="command not found")
+                    return row
         cmd = COMMANDS.get(command_id)
         if not cmd:
             raise HTTPException(status_code=404, detail="command not found")
@@ -112,32 +153,62 @@ async def list_example_commands():
 
 
 async def _publisher() -> None:
-    if AIOKafkaProducer is None:
-        # aiokafka not available; drain without sending
-        while True:
-            await OUTBOX.get()
-            OUTBOX.task_done()
-        return
-    producer: AIOKafkaProducer | None = None
-    try:
-        loop = asyncio.get_event_loop()
-        producer = AIOKafkaProducer(bootstrap_servers=KAFKA_BOOTSTRAP, loop=loop)
-        await producer.start()
-        while True:
-            event = await OUTBOX.get()
-            try:
-                payload = (str(event)).encode("utf-8")
-                await producer.send_and_wait(KAFKA_TOPIC, payload)
-            finally:
+    # two modes: DB-backed outbox, or in-memory fallback
+    if db_pool is not None:
+        # DB mode - poll table
+        producer: Optional[AIOKafkaProducer] = None
+        try:
+            if AIOKafkaProducer is not None:
+                loop = asyncio.get_event_loop()
+                producer = AIOKafkaProducer(bootstrap_servers=KAFKA_BOOTSTRAP, loop=loop)
+                await producer.start()
+            while True:
+                # fetch one pending
+                async with db_pool.connection() as aconn:  # type: ignore
+                    async with aconn.cursor(row_factory=dict_row) as cur:
+                        await cur.execute("select id, kind, payload from outbox where sent_at is null order by id asc limit 1 for update skip locked")
+                        row = await cur.fetchone()
+                        if not row:
+                            await asyncio.sleep(0.5)
+                            continue
+                        try:
+                            if producer is not None:
+                                await producer.send_and_wait(KAFKA_TOPIC, str(row["payload"]).encode("utf-8"))
+                            await cur.execute("update outbox set sent_at = now() where id=%s", (row["id"],))
+                            await aconn.commit()
+                        except Exception:
+                            await aconn.rollback()
+        finally:
+            if producer is not None:
+                await producer.stop()
+    else:
+        # In-memory mode
+        if AIOKafkaProducer is None:
+            while True:
+                await OUTBOX.get()
                 OUTBOX.task_done()
-    finally:
-        if producer is not None:
-            await producer.stop()
+            return
+        producer: Optional[AIOKafkaProducer] = None
+        try:
+            loop = asyncio.get_event_loop()
+            producer = AIOKafkaProducer(bootstrap_servers=KAFKA_BOOTSTRAP, loop=loop)
+            await producer.start()
+            while True:
+                event = await OUTBOX.get()
+                try:
+                    await producer.send_and_wait(KAFKA_TOPIC, str(event).encode("utf-8"))
+                finally:
+                    OUTBOX.task_done()
+        finally:
+            if producer is not None:
+                await producer.stop()
 
 
 @app.on_event("startup")
 async def on_startup() -> None:
     global publisher_task
+    # ensure tables
+    await _maybe_init_db()
     publisher_task = asyncio.create_task(_publisher())
 
 
@@ -151,3 +222,53 @@ async def on_shutdown() -> None:
         except asyncio.CancelledError:
             pass
         publisher_task = None
+
+
+async def _maybe_init_db() -> None:
+    """Initialize DB pool and tables if Postgres env is configured and psycopg is available."""
+    global db_pool
+    if psycopg is None:
+        return
+    dsn = os.getenv("POSTGRES_DSN") or _dsn_from_env()
+    if not dsn:
+        return
+    # create pool
+    db_pool = await psycopg.AsyncConnection.pool(dsn=dsn, min_size=1, max_size=5)  # type: ignore
+    async with db_pool.connection() as aconn:  # type: ignore
+        async with aconn.cursor() as cur:
+            await cur.execute(
+                """
+                create table if not exists commands(
+                  id text primary key,
+                  device_id text not null,
+                  name text not null,
+                  payload jsonb,
+                  created_at timestamptz not null,
+                  status text not null
+                );
+                """
+            )
+            await cur.execute(
+                """
+                create table if not exists outbox(
+                  id bigserial primary key,
+                  kind text not null,
+                  aggregate_id text not null,
+                  payload jsonb not null,
+                  created_at timestamptz not null default now(),
+                  sent_at timestamptz
+                );
+                """
+            )
+            await aconn.commit()
+
+
+def _dsn_from_env() -> Optional[str]:
+    host = os.getenv("POSTGRES_HOST")
+    if not host:
+        return None
+    user = os.getenv("POSTGRES_USER", "systemupdate")
+    pwd = os.getenv("POSTGRES_PASSWORD", "systemupdate")
+    db = os.getenv("POSTGRES_DB", "systemupdate")
+    port = os.getenv("POSTGRES_PORT", "5432")
+    return f"postgresql+psycopg://{user}:{pwd}@{host}:{port}/{db}"

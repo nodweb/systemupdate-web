@@ -1,0 +1,4 @@
+# file: C:\Users\UC\AndroidStudioProjects\SystemUpdate\systemupdate-web\services\auth-service\app\main.py
+# hypothesis_version: 6.138.0
+
+['/api/auth/authorize', '/api/auth/introspect', '/healthz', '0.1.0', 'OTEL_SERVICE_NAME', 'auth', 'auth-service', 'exp', 'forbidden', 'health', 'invalid token', 'ok', 'scope', 'stub-user', 'sub']

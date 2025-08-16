@@ -1,0 +1,4 @@
+# file: C:\Users\UC\AndroidStudioProjects\SystemUpdate\systemupdate-web\services\auth-service\app\security.py
+# hypothesis_version: 6.138.0
+
+[5.0, '/', '300', '60', 'CLOCK_SKEW_LEEWAY', 'OIDC_ALG', 'OIDC_AUDIENCE', 'OIDC_ISSUER', 'OIDC_JWKS_TTL', 'OIDC_JWKS_URL', 'RS256', 'fetched_at', 'keys', 'kid', 'leeway', 'missing kid']

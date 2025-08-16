@@ -1,0 +1,4 @@
+# file: C:\Users\UC\AndroidStudioProjects\SystemUpdate\systemupdate-web\services\auth-service\app\policy.py
+# hypothesis_version: 6.138.0
+
+['admin', 'policy_denied', 'realm_access', 'role:admin', 'roles', 'scope']

@@ -97,6 +97,23 @@ Client scaffolds:
 
 All have basic healthchecks; see `docker-compose.yml` for details.
 
+## Observability (OTel + Prometheus + Grafana)
+
+- Components:
+  - OpenTelemetry Collector: OTLP gRPC `localhost:4317`, OTLP HTTP `localhost:4318`
+  - Prometheus: `http://localhost:9090` (scrapes OTel Collector metrics at `otel-collector:8889`)
+  - Grafana: `http://localhost:3000` (admin/admin by default)
+- Collector config: `observability/otel-collector-config.yaml`
+- Prometheus config: `observability/prometheus.yml`
+
+Quickstart (from `systemupdate-web/`):
+
+```powershell
+docker compose up -d otel-collector prometheus grafana
+```
+
+Next, configure backend services to export OTLP traces/metrics to the collector. Defaults can point to `otel-collector:4317` (gRPC) or `:4318` (HTTP) inside Compose.
+
 ## Backend APIs (M0/M1)
 
 ### Command Service (`services/command-service`)
