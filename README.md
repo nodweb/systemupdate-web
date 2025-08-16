@@ -26,6 +26,10 @@ npm run dev
 
 Build/typecheck/lint in CI via `frontend-ci.yml`.
 
+### Dev Gateway & Proxy
+
+- See `docs/DEV_GATEWAY.md` for Traefik routing (`/api/*`) and Vite proxy usage with curl examples.
+
 ## Schemas (Contracts)
 
 - Location: `libs/proto-schemas/`
@@ -48,6 +52,16 @@ Build/typecheck/lint in CI via `frontend-ci.yml`.
 # - protoc installed on PATH
 # - Node 18/20 and ts-proto installed globally: npm i -g ts-proto
 python scripts/codegen/proto_codegen.py
+```
+
+Fetch CI artifact locally (from `systemupdate-web/`):
+
+```bash
+# env vars required:
+#   GH_REPO=nodweb/systemupdate-web
+#   GH_TOKEN=<your token with repo read>
+python scripts/codegen/fetch_codegen_artifact.py
+# outputs extracted into generated/
 ```
 
 Client scaffolds:
