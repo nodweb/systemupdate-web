@@ -2,7 +2,7 @@ import json
 import os
 import asyncio
 from typing import Any, Dict
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 
 try:
@@ -67,3 +67,25 @@ async def ingest(body: IngestBody):
         except Exception:
             sent = False
     return {"accepted": True, "kafka_sent": sent}
+
+
+@app.websocket("/ws/ingest")
+async def ws_ingest(ws: WebSocket):
+    await ws.accept()
+    try:
+        while True:
+            msg = await ws.receive_text()
+            try:
+                data = json.loads(msg)
+                sent = False
+                if producer is not None:
+                    try:
+                        await producer.send_and_wait(topic_default, json.dumps(data).encode("utf-8"))
+                        sent = True
+                    except Exception:
+                        sent = False
+                await ws.send_json({"accepted": True, "kafka_sent": sent})
+            except Exception:
+                await ws.send_json({"accepted": False, "error": "invalid json"})
+    except WebSocketDisconnect:
+        return

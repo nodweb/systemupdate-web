@@ -97,6 +97,33 @@ Client scaffolds:
 
 All have basic healthchecks; see `docker-compose.yml` for details.
 
+## Backend APIs (M0/M1)
+
+### Command Service (`services/command-service`)
+
+- `GET /healthz`
+- `POST /commands` → create command (in-memory store)
+- `GET /commands` → list commands
+- `GET /commands/{id}` → get one
+
+Env:
+- `KAFKA_BOOTSTRAP` (default `kafka:9092`)
+- `COMMAND_EVENTS_TOPIC` (default `command.events`)
+
+Notes:
+- Simple Outbox queue + background Kafka publisher (aiokafka). If `aiokafka` not available, events are drained no-op.
+- Optional OpenTelemetry tracing to console if `opentelemetry-sdk` present.
+
+### Data Ingest Service (`services/data-ingest-service`)
+
+- `GET /healthz`
+- `POST /ingest` → accepts JSON and (optionally) publishes to Kafka
+- `WS /ws/ingest` → accepts JSON messages over WebSocket and (optionally) publishes to Kafka
+
+Env:
+- `KAFKA_BOOTSTRAP` (default `kafka:9092`)
+- `INGEST_TOPIC` (default `device.ingest.raw`)
+
 ## Quick Local Testing
 
 - Aggregate tests from repo root (using auth-service venv Python):
