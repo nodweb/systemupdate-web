@@ -26,6 +26,16 @@ npm run dev
 
 Build/typecheck/lint in CI via `frontend-ci.yml`.
 
+Local scripts:
+
+```bash
+npm run typecheck
+npm run lint
+npm run format:check
+```
+
+CI workflow for frontend lint/typecheck: `.github/workflows/frontend-lint.yml`.
+
 ### Dev Gateway & Proxy
 
 - See `docs/DEV_GATEWAY.md` for Traefik routing (`/api/*`) and Vite proxy usage with curl examples.
