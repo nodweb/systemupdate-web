@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: SystemUpdate Dashboards
+    orgId: 1
+    folder: SystemUpdate
+    type: file
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: true

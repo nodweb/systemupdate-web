@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 from typing import List, Dict, Optional
 from datetime import datetime, timezone
 import uuid
+import httpx
 
 app = FastAPI(title="Command Service", version="0.3.0")
 
@@ -12,9 +13,14 @@ app = FastAPI(title="Command Service", version="0.3.0")
 try:
     from .otel import init_tracing  # local helper sets provider + FastAPI instrumentation
     from opentelemetry import trace
+    from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 
     init_tracing(service_name="command-service", app=app)
     tracer = trace.get_tracer(__name__)
+    try:
+        HTTPXClientInstrumentor().instrument()
+    except Exception:
+        pass
 except Exception:
     class _Noop:
         def __enter__(self):
@@ -143,6 +149,19 @@ async def list_example_commands():
             {"id": "cmd-2", "device_id": "dev-002", "name": "install_update", "created_at": "2024-01-02T00:00:00Z"},
         ]
     }
+
+
+@app.get("/demo/downstream")
+async def demo_downstream(device_id: str = "dev-001"):
+    """
+    Part of the demo e2e trace: command-service calls device-service.
+    """
+    with tracer.start_as_current_span("command.demo_downstream"):
+        url = "http://device-service:8003/demo/leaf"
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            r = await client.get(url, params={"device_id": device_id})
+            r.raise_for_status()
+            return r.json()
 
 
 async def _publisher() -> None:

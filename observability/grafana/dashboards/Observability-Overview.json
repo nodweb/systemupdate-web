@@ -1,0 +1,47 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "type": "text",
+      "title": "How to Explore Traces",
+      "gridPos": {"h": 4, "w": 24, "x": 0, "y": 0},
+      "options": {
+        "content": "Use Explore -> Tempo datasource. Filter by service.name (e.g., command-service, analytics-service).",
+        "mode": "markdown"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Collector: Accepted Spans (rate)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {"h": 10, "w": 24, "x": 0, "y": 4},
+      "fieldConfig": {"defaults": {"unit": "1/s"}, "overrides": []},
+      "targets": [
+        {
+          "expr": "sum(rate(otelcol_receiver_accepted_spans[5m]))",
+          "legendFormat": "accepted_spans",
+          "refId": "A"
+        }
+      ]
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": ["systemupdate", "observability"],
+  "templating": {"list": []},
+  "time": {"from": "now-6h", "to": "now"},
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Observability Overview",
+  "uid": "obs-overview"
+}

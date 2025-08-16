@@ -2,6 +2,21 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from typing import Dict, Optional, List
 from uuid import uuid4
+from datetime import datetime, timezone
+
+try:
+    from opentelemetry import trace
+    _tracer = trace.get_tracer(__name__)
+except Exception:
+    class _Noop:
+        def __enter__(self):
+            return self
+        def __exit__(self, *a):
+            return False
+    class _Tracer:
+        def start_as_current_span(self, name):
+            return _Noop()
+    _tracer = _Tracer()
 
 app = FastAPI(title="SystemUpdate Device Service", version="0.1.0")
 
@@ -96,3 +111,17 @@ async def update_presence(dev_id: str, payload: PresenceUpdate) -> Device:
     dev.online = payload.online
     _db[dev_id] = dev
     return dev
+
+
+@app.get("/demo/leaf")
+async def demo_leaf(device_id: str = "dev-001"):
+    """
+    Leaf endpoint for e2e tracing demo. Creates a span and returns a simple payload.
+    """
+    with _tracer.start_as_current_span("device.demo_leaf"):
+        now = datetime.now(timezone.utc).isoformat()
+        # ensure device exists in in-memory DB for demo
+        if device_id not in _db:
+            _db[device_id] = Device(id=device_id, name=f"Device {device_id}", tags=["demo"], online=True)
+        dev = _db[device_id]
+        return {"device_id": dev.id, "name": dev.name, "online": dev.online, "ts": now}
