@@ -1,0 +1,27 @@
+syntax = "proto3";
+package systemupdate.v1;
+
+// Placeholder proto for WS and device events. Will expand with real fields.
+
+message DeviceEvent {
+  string device_id = 1;
+  string type = 2; // e.g., ONLINE, OFFLINE, METRIC, COMMAND_STATUS
+  string payload_json = 3;
+}
+
+message CommandRequest {
+  string command_id = 1;
+  string device_id = 2;
+  string name = 3;
+  string args_json = 4;
+}
+
+message CommandAck {
+  string command_id = 1;
+  bool accepted = 2;
+  string reason = 3;
+}
+
+service DeviceCommand {
+  rpc Send(CommandRequest) returns (CommandAck);
+}

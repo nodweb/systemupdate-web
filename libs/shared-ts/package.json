@@ -1,0 +1,14 @@
+{
+  "name": "systemupdate-shared-ts",
+  "version": "0.1.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "openapi-typescript": "^7.5.0"
+  },
+  "scripts": {
+    "generate": "npm run generate:auth && npm run generate:device",
+    "generate:auth": "openapi-typescript ../../libs/proto-schemas/openapi/auth.yaml -o ./types/auth.d.ts",
+    "generate:device": "openapi-typescript ../../libs/proto-schemas/openapi/device.yaml -o ./types/device.d.ts"
+  }
+}

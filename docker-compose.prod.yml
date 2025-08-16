@@ -1,0 +1,40 @@
+version: "3.9"
+
+# Production-like overrides: adds Traefik with Let's Encrypt and publishes only 80/443.
+
+services:
+  traefik:
+    image: traefik:v3.0
+    command:
+      - --api.dashboard=true
+      - --providers.file.directory=/etc/traefik/dynamic
+      - --providers.file.watch=true
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --certificatesresolvers.le.acme.tlschallenge=true
+      - --certificatesresolvers.le.acme.email=${LETSENCRYPT_EMAIL}
+      - --certificatesresolvers.le.acme.storage=/letsencrypt/acme.json
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik/dynamic/:/etc/traefik/dynamic:ro
+      - traefik_letsencrypt:/letsencrypt
+    networks:
+      - web
+
+  # Example: enable once services are defined (auth-service, device-service, ws-hub)
+  # auth-service:
+  #   labels:
+  #     - "traefik.enable=true"
+  #     - "traefik.http.routers.auth.rule=Host(`${DOMAIN}`) && PathPrefix(`/api/auth`)"
+  #     - "traefik.http.routers.auth.entrypoints=websecure"
+  #     - "traefik.http.routers.auth.tls.certresolver=le"
+
+networks:
+  web:
+    external: false
+
+volumes:
+  traefik_letsencrypt:

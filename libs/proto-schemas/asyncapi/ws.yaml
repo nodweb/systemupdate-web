@@ -1,0 +1,34 @@
+asyncapi: '2.6.0'
+info:
+  title: SystemUpdate WebSocket Hub
+  version: 0.1.0
+  description: AsyncAPI placeholder for WS Hub. Will be expanded with full channels and schemas.
+servers:
+  local:
+    url: ws://localhost:8002
+    protocol: ws
+channels:
+  /ws:
+    description: Bidirectional WebSocket for devices and dashboard
+    subscribe:
+      message:
+        name: ClientToServer
+        payload:
+          type: object
+          properties:
+            type:
+              type: string
+            data:
+              type: object
+    publish:
+      message:
+        name: ServerToClient
+        payload:
+          type: object
+          properties:
+            type:
+              type: string
+            ts:
+              type: string
+            data:
+              type: object

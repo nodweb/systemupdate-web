@@ -1,0 +1,21 @@
+http:
+  routers:
+    ws-hub:
+      rule: "PathPrefix(`/ws`) || PathPrefix(`/api/ws`)"
+      service: ws-hub
+      entryPoints:
+        - web
+      middlewares:
+        - default-headers
+  services:
+    ws-hub:
+      loadBalancer:
+        servers:
+          - url: "http://su-ws-hub:8002"
+  middlewares:
+    default-headers:
+      headers:
+        customResponseHeaders:
+          X-Frame-Options: DENY
+          X-Content-Type-Options: nosniff
+          Referrer-Policy: no-referrer

@@ -1,0 +1,14 @@
+http:
+  routers:
+    device-api:
+      rule: "PathPrefix(`/api/devices`)"
+      service: device-service
+      entryPoints:
+        - web
+      middlewares:
+        - default-headers
+  services:
+    device-service:
+      loadBalancer:
+        servers:
+          - url: "http://su-device:8003"

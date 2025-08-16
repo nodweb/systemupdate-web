@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Node
+node_modules/
+
+# Env
+.env
+*.env
+
+# Docker
+.volumes/
+**/pgdata/
+**/minio/
+**/letsencrypt/
+
+# SBOM/scan artifacts
+sbom.spdx.json
+.trivy/
+
+# IDE
+.vscode/
+.idea/
