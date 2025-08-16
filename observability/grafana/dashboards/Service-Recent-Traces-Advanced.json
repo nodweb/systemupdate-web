@@ -1,0 +1,103 @@
+{
+  "title": "Service Recent Traces (Advanced)",
+  "uid": "recent-traces-adv",
+  "tags": ["systemupdate", "traces"],
+  "schemaVersion": 39,
+  "style": "dark",
+  "time": {"from":"now-1h","to":"now"},
+  "refresh": "15s",
+  "templating": {
+    "list": [
+      {
+        "name": "service",
+        "type": "query",
+        "datasource": {"type":"tempo","uid":"tempo"},
+        "query": "label_values(service.name)",
+        "refresh": 2,
+        "current": {"selected": false, "text": "All", "value": ""}
+      },
+      {
+        "name": "method",
+        "type": "custom",
+        "query": "GET,POST,PUT,DELETE,PATCH,*,",
+        "current": {"text": "*", "value": "*"}
+      },
+      {
+        "name": "route",
+        "type": "query",
+        "datasource": {"type":"tempo","uid":"tempo"},
+        "query": "label_values(http.route)",
+        "refresh": 2,
+        "current": {"selected": false, "text": "All", "value": ""}
+      },
+      {
+        "name": "status",
+        "type": "custom",
+        "query": "STATUS_CODE_OK,STATUS_CODE_ERROR,STATUS_CODE_UNSET,",
+        "current": {"text": "", "value": ""}
+      },
+      {
+        "name": "kind",
+        "type": "custom",
+        "query": "server,client,producer,consumer,internal,",
+        "current": {"text": "", "value": ""}
+      },
+      {
+        "name": "peer",
+        "type": "query",
+        "datasource": {"type":"tempo","uid":"tempo"},
+        "query": "label_values(peer.service)",
+        "refresh": 2,
+        "current": {"text": "", "value": ""}
+      },
+      {
+        "name": "dbsys",
+        "type": "query",
+        "datasource": {"type":"tempo","uid":"tempo"},
+        "query": "label_values(db.system)",
+        "refresh": 2,
+        "current": {"text": "", "value": ""}
+      },
+      {
+        "name": "msgsys",
+        "type": "query",
+        "datasource": {"type":"tempo","uid":"tempo"},
+        "query": "label_values(messaging.system)",
+        "refresh": 2,
+        "current": {"text": "", "value": ""}
+      }
+    ]
+  },
+  "panels": [
+    {"type":"row", "title":"Filters", "gridPos": {"h":1,"w":24,"x":0,"y":0}},
+    {
+      "type": "table",
+      "title": "Recent Traces (Filtered)",
+      "gridPos": {"h":12, "w":24, "x":0, "y":1},
+      "datasource": {"type":"tempo","uid":"tempo"},
+      "targets": [
+        {
+          "query": "{ span: ( service.name = \"$service\" or \"$service\" = \"\" ) and ( http.method = \"$method\" or \"$method\" = \"*\" ) and ( http.route = \"$route\" or \"$route\" = \"\" ) and ( status.code = \"$status\" or \"$status\" = \"\" ) and ( span.kind = \"$kind\" or \"$kind\" = \"\" ) and ( peer.service = \"$peer\" or \"$peer\" = \"\" ) and ( db.system = \"$dbsys\" or \"$dbsys\" = \"\" ) and ( messaging.system = \"$msgsys\" or \"$msgsys\" = \"\" ) } | trace_id\n| limit 200",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "showHeader": true
+      }
+    },
+    {"type":"row", "title":"Errors Only", "gridPos": {"h":1,"w":24,"x":0,"y":13}},
+    {
+      "type": "table",
+      "title": "Error Traces (non-OK)",
+      "gridPos": {"h":12, "w":24, "x":0, "y":14},
+      "datasource": {"type":"tempo","uid":"tempo"},
+      "targets": [
+        {
+          "query": "{ span: ( service.name = \"$service\" or \"$service\" = \"\" ) and status.code != \"STATUS_CODE_OK\" } | trace_id | limit 200",
+          "refId": "A"
+        }
+      ],
+      "options": {"showHeader": true}
+    }
+  ]
+}

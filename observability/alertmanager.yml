@@ -1,10 +1,13 @@
 route:
-  receiver: dev-null
+  receiver: webhooks
   group_by: ['alertname', 'service_name']
   group_interval: 30s
   repeat_interval: 4h
 
 receivers:
+  - name: webhooks
+    webhook_configs:
+      - url: 'http://notification-service:8007/alerts'
   - name: dev-null
 
 # Examples to enable later:

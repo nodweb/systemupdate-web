@@ -1,0 +1,57 @@
+{
+  "title": "Uptime Overview",
+  "uid": "uptime-overview",
+  "tags": ["systemupdate", "uptime"],
+  "schemaVersion": 39,
+  "style": "dark",
+  "time": {"from":"now-6h","to":"now"},
+  "refresh": "30s",
+  "panels": [
+    {"type":"row","title":"Summary","gridPos":{"h":1,"w":24,"x":0,"y":0}},
+    {
+      "type":"stat",
+      "title":"Up Services (http_2xx)",
+      "gridPos":{"h":4,"w":6,"x":0,"y":1},
+      "datasource":{"type":"prometheus","uid":"prometheus"},
+      "targets":[{"expr":"sum(probe_success{job=\"blackbox-http\"})","refId":"A"}]
+    },
+    {
+      "type":"stat",
+      "title":"Down Services",
+      "gridPos":{"h":4,"w":6,"x":6,"y":1},
+      "datasource":{"type":"prometheus","uid":"prometheus"},
+      "targets":[{"expr":"sum(1 - probe_success{job=\"blackbox-http\"})","refId":"A"}]
+    },
+    {
+      "type":"stat",
+      "title":"Avg Response Time (ms)",
+      "gridPos":{"h":4,"w":6,"x":12,"y":1},
+      "datasource":{"type":"prometheus","uid":"prometheus"},
+      "fieldConfig":{"defaults":{"unit":"ms"}},
+      "targets":[{"expr":"avg(probe_duration_seconds{job=\"blackbox-http\"}) * 1000","refId":"A"}]
+    },
+    {
+      "type":"stat",
+      "title":"Probe Errors (rate 5m)",
+      "gridPos":{"h":4,"w":6,"x":18,"y":1},
+      "datasource":{"type":"prometheus","uid":"prometheus"},
+      "targets":[{"expr":"sum(rate(probe_http_status_code{job=\"blackbox-http\",status_code!~\"2..\"}[5m]))","refId":"A"}]
+    },
+    {"type":"row","title":"Per Instance","gridPos":{"h":1,"w":24,"x":0,"y":5}},
+    {
+      "type":"timeseries",
+      "title":"Availability (probe_success)",
+      "gridPos":{"h":8,"w":24,"x":0,"y":6},
+      "datasource":{"type":"prometheus","uid":"prometheus"},
+      "targets":[{"expr":"avg_over_time(probe_success{job=\"blackbox-http\"}[5m])","legendFormat":"{{instance}}","refId":"A"}]
+    },
+    {
+      "type":"timeseries",
+      "title":"HTTP Latency (ms)",
+      "gridPos":{"h":8,"w":24,"x":0,"y":14},
+      "datasource":{"type":"prometheus","uid":"prometheus"},
+      "fieldConfig":{"defaults":{"unit":"ms"}},
+      "targets":[{"expr":"avg by(instance)(probe_duration_seconds{job=\"blackbox-http\"}) * 1000","legendFormat":"{{instance}}","refId":"A"}]
+    }
+  ]
+}

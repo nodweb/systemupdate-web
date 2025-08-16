@@ -1,0 +1,23 @@
+apiVersion: 1
+contactPoints:
+  - orgId: 1
+    name: default-devnull
+    receivers:
+      - uid: devnull
+        type: webhook
+        settings:
+          url: http://localhost:0/dev-null
+          httpMethod: POST
+        disableResolveMessage: false
+  # Example Slack (enable by replacing url and uncommenting)
+  # - orgId: 1
+  #   name: slack-notifications
+  #   receivers:
+  #     - uid: slack
+  #       type: slack
+  #       settings:
+  #         url: $__env{GRAFANA_SLACK_WEBHOOK_URL}
+  #         recipient: "#alerts"
+  #         username: grafana
+  #         mentionUsers: ""
+  #         icon_emoji: ":rotating_light:"

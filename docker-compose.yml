@@ -43,6 +43,7 @@ services:
     volumes:
       - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./observability/alerts.rules.yml:/etc/prometheus/alerts.rules.yml:ro
+      - ./observability/recording.rules.yml:/etc/prometheus/recording.rules.yml:ro
     ports:
       - "9090:9090"
     depends_on:
@@ -61,6 +62,7 @@ services:
       - ./observability/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
       - ./observability/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
       - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ./observability/grafana/provisioning/alerting:/etc/grafana/provisioning/alerting:ro
     depends_on:
       prometheus:
         condition: service_started
@@ -75,6 +77,12 @@ services:
       - "9093:9093"
     volumes:
       - ./observability/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+
+  blackbox-exporter:
+    image: prom/blackbox-exporter:v0.25.0
+    container_name: su-blackbox
+    ports:
+      - "9115:9115"
 
   kafka:
     image: bitnami/kafka:3.7
@@ -146,6 +154,22 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+
+  notification-service:
+    build: ./services/notification-service
+    container_name: su-notification
+    environment:
+      PORT: 8007
+      OTEL_TRACES_ENABLE: "1"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_SERVICE_NAME: notification-service
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8007"]
+    ports:
+      - "8007:8007"
+    restart: unless-stopped
+    depends_on:
+      otel-collector:
+        condition: service_started
 
   ws-hub:
     build: ./services/ws-hub

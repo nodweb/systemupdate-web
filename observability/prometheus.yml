@@ -3,6 +3,7 @@ global:
 
 rule_files:
   - /etc/prometheus/alerts.rules.yml
+  - /etc/prometheus/recording.rules.yml
 
 alerting:
   alertmanagers:
@@ -13,3 +14,24 @@ scrape_configs:
   - job_name: 'otel-collector'
     static_configs:
       - targets: ['otel-collector:8889']
+
+  - job_name: 'blackbox-http'
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets:
+          - http://command-service:8004/health
+          - http://device-service:8003/health
+          - http://auth-service:8001/health
+          - http://ws-hub:8002/health
+          - http://analytics-service:8006/health
+          - http://data-ingest-service:8005/health
+          - http://notification-service:8007/health
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115

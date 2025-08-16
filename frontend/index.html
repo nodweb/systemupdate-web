@@ -7,6 +7,42 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- Optional: Enable OpenTelemetry Web tracing to OTLP/HTTP (Collector at http://localhost:4318) -->
+    <!-- To enable, remove the surrounding HTML comments -->
+    <!--
+    <script type="module">
+      const otlpEndpoint = 'http://localhost:4318/v1/traces';
+      const serviceName = 'frontend-spa';
+      const exporterMod = await import('https://esm.sh/@opentelemetry/exporter-trace-otlp-http@0.50.0');
+      const coreMod = await import('https://esm.sh/@opentelemetry/core@1.22.0');
+      const sdkWebMod = await import('https://esm.sh/@opentelemetry/sdk-trace-web@1.22.0');
+      const resourcesMod = await import('https://esm.sh/@opentelemetry/resources@1.22.0');
+      const semanticConventions = await import('https://esm.sh/@opentelemetry/semantic-conventions@1.22.0');
+      const docLoadMod = await import('https://esm.sh/@opentelemetry/instrumentation-document-load@0.50.0');
+      const fetchMod = await import('https://esm.sh/@opentelemetry/instrumentation-fetch@0.50.0');
+      const xhrMod = await import('https://esm.sh/@opentelemetry/instrumentation-xml-http-request@0.50.0');
+
+      const exporter = new exporterMod.OTLPTraceExporter({ url: otlpEndpoint });
+      const provider = new sdkWebMod.WebTracerProvider({
+        resource: new resourcesMod.Resource({
+          [semanticConventions.SEMRESATTRS_SERVICE_NAME]: serviceName,
+        }),
+      });
+      provider.addSpanProcessor(new sdkWebMod.BatchSpanProcessor(exporter));
+      provider.register();
+
+      const instrumentations = [
+        new docLoadMod.DocumentLoadInstrumentation(),
+        new fetchMod.FetchInstrumentation({ propagateTraceHeaderCorsUrls: [/.*/] }),
+        new xhrMod.XMLHttpRequestInstrumentation(),
+      ];
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const _ = new sdkWebMod.WebTracerProvider({}); // keep tree-shaking from removing imports in some bundlers
+      // Dynamic import of auto-instrumentations is avoided; we instantiate needed ones directly
+      instrumentations.forEach((i) => i.enable());
+      console.log('[OTel] Web tracing enabled');
+    </script>
+    -->
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

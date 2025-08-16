@@ -1,0 +1,14 @@
+apiVersion: 1
+policies:
+  - orgId: 1
+    receiver: default-devnull
+    group_by: ['alertname', 'job']
+    routes:
+      - receiver: default-devnull
+        object_matchers:
+          - ['severity', '=', 'critical']
+        continue: false
+      - receiver: default-devnull
+        object_matchers:
+          - ['severity', '=', 'warning']
+        continue: false
