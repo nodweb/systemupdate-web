@@ -11,7 +11,8 @@
     "@typescript-eslint/eslint-plugin": "^8.2.0",
     "@typescript-eslint/parser": "^8.2.0",
     "prettier": "^3.3.3",
-    "eslint-config-prettier": "^9.1.0"
+    "eslint-config-prettier": "^9.1.0",
+    "typescript": "^5.5.4"
   },
   "scripts": {
     "generate": "npm run generate:auth && npm run generate:device",
@@ -19,6 +20,7 @@
     "generate:device": "openapi-typescript ../../libs/proto-schemas/openapi/device.yaml -o ./types/device.d.ts",
     "lint": "eslint . --ext .ts,.tsx,.js,.cjs,.mjs",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "typecheck": "tsc --noEmit"
   }
 }
