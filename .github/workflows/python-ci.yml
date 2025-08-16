@@ -1,0 +1,47 @@
+name: Python Lint and Tests
+
+on:
+  push:
+    paths:
+      - 'systemupdate-web/**'
+  pull_request:
+    paths:
+      - 'systemupdate-web/**'
+
+jobs:
+  test:
+    name: Pytest (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [services/auth-service, services/device-service, services/ws-hub]
+    defaults:
+      run:
+        working-directory: systemupdate-web/${{ matrix.service }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('systemupdate-web/${{ matrix.service }}/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt || true
+          pip install pytest
+
+      - name: Run tests
+        env:
+          PYTHONPATH: '.'
+        run: pytest -q

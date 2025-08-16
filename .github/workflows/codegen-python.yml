@@ -1,0 +1,41 @@
+name: OpenAPI Python Codegen Check
+
+on:
+  push:
+    paths:
+      - 'systemupdate-web/**'
+      - '!systemupdate-web/libs/shared-python/clients/**'
+  pull_request:
+    paths:
+      - 'systemupdate-web/**'
+      - '!systemupdate-web/libs/shared-python/clients/**'
+
+jobs:
+  codegen:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: systemupdate-web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install openapi-python-client
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r libs/shared-python/requirements.txt
+
+      - name: Run codegen
+        run: |
+          python libs/shared-python/codegen.py
+
+      - name: Upload generated clients (artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-openapi-clients
+          path: systemupdate-web/libs/shared-python/clients/

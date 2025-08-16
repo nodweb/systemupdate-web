@@ -1,0 +1,30 @@
+name: Markdown Lint
+
+on:
+  push:
+    paths:
+      - 'systemupdate-web/**/*.md'
+  pull_request:
+    paths:
+      - 'systemupdate-web/**/*.md'
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install markdownlint-cli2
+        run: |
+          npm install -g markdownlint-cli2@0.13.0
+
+      - name: Run markdownlint-cli2
+        working-directory: systemupdate-web
+        run: |
+          markdownlint-cli2 "**/*.md" "!**/node_modules/**"
