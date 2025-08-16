@@ -148,6 +148,21 @@ services:
       kafka:
         condition: service_healthy
 
+  analytics-service:
+    build: ./services/analytics-service
+    container_name: su-analytics
+    environment:
+      PORT: 8006
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8006"]
+    ports:
+      - "8006:8006"
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
 #  gateway:
 #    image: kong:3.6
 #    # Configure declarative config and DB-less mode in M1
