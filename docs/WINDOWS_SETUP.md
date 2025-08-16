@@ -70,3 +70,32 @@ Then re-run the script with `-SkipUbuntuInstall`.
 
 ## Next steps
 - See `docs/TEST_GUIDE.md` for running tests, environment toggles (e.g., `DOCKER_AVAILABLE`), and common issues.
+
+## Generate trace load (optional)
+To visualize distributed tracing and the latency/error dashboards, you can generate sample traffic with the PowerShell script:
+
+```powershell
+# From repo root: systemupdate-web/
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/generate-trace-load.ps1 `
+  -Target "http://localhost:8004/demo/downstream" `
+  -Qps 10 `
+  -DurationSeconds 60 `
+  -Concurrency 4 `
+  -DevicePrefix "dev-load" `
+  -Profile steady `          # steady | burst | spike
+  -ErrorRate 0.0 `           # 0..1 injects errors by hitting 404 path
+  -VerboseLogs
+```
+
+Notes:
+- Default target hits `command-service` which calls `device-service` and produces cross-service traces.
+- Open Grafana at `http://localhost:3000` → Explore (Tempo) or dashboards under folder `SystemUpdate`.
+
+Examples:
+```powershell
+# Burst profile with occasional errors
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/generate-trace-load.ps1 -Profile burst -ErrorRate 0.1 -Qps 20 -DurationSeconds 90
+
+# Spike profile to stress latency SLO
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/generate-trace-load.ps1 -Profile spike -Qps 30 -DurationSeconds 60
+```
