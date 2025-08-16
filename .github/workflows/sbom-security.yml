@@ -41,4 +41,8 @@ jobs:
 
       - name: Trivy filesystem scan (vulns + secrets)
         run: |
-          trivy fs --no-progress --scanners vuln,secret --severity HIGH,CRITICAL --exit-code 0 .
+          trivy fs --no-progress --scanners vuln,secret --severity HIGH,CRITICAL --exit-code 1 .
+
+      - name: Upload Trivy results (optional SARIF step placeholder)
+        if: always()
+        run: echo "Trivy scan completed."

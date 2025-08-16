@@ -1,0 +1,42 @@
+name: TypeScript OpenAPI Codegen
+
+on:
+  push:
+    paths:
+      - 'systemupdate-web/libs/shared-ts/**'
+      - 'systemupdate-web/libs/proto-schemas/**'
+      - 'systemupdate-web/.github/workflows/ts-codegen.yml'
+  pull_request:
+    paths:
+      - 'systemupdate-web/libs/shared-ts/**'
+      - 'systemupdate-web/libs/proto-schemas/**'
+      - 'systemupdate-web/.github/workflows/ts-codegen.yml'
+
+jobs:
+  codegen:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: systemupdate-web/libs/shared-ts
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: |
+          npm ci
+
+      - name: Run TypeScript codegen
+        run: |
+          npm run generate
+
+      - name: Upload generated types
+        uses: actions/upload-artifact@v4
+        with:
+          name: ts-openapi-types
+          path: systemupdate-web/libs/shared-ts/types/
