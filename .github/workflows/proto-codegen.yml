@@ -1,0 +1,71 @@
+name: Schemas Codegen (Protobuf -> TS/Python)
+
+on:
+  push:
+    paths:
+      - 'systemupdate-web/libs/proto-schemas/proto/**'
+      - 'systemupdate-web/.github/workflows/proto-codegen.yml'
+  pull_request:
+    paths:
+      - 'systemupdate-web/libs/proto-schemas/proto/**'
+      - 'systemupdate-web/.github/workflows/proto-codegen.yml'
+
+jobs:
+  codegen:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: systemupdate-web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install ts-proto plugin
+        run: npm i -g ts-proto
+
+      - name: Create output dirs
+        run: |
+          mkdir -p generated/ts
+          mkdir -p generated/python
+
+      - name: Generate TypeScript types via ts-proto
+        run: |
+          shopt -s globstar
+          for f in libs/proto-schemas/proto/**/*.proto; do
+            echo "Generating TS for $f"
+            protoc \
+              --proto_path=libs/proto-schemas/proto \
+              --plugin=./node_modules/.bin/protoc-gen-ts_proto || true
+            # fallback to global path
+            protoc \
+              --proto_path=libs/proto-schemas/proto \
+              --ts_proto_out=generated/ts \
+              "$f"
+          done
+
+      - name: Generate Python types via protoc
+        run: |
+          shopt -s globstar
+          for f in libs/proto-schemas/proto/**/*.proto; do
+            echo "Generating Python for $f"
+            protoc \
+              --proto_path=libs/proto-schemas/proto \
+              --python_out=generated/python \
+              "$f"
+          done
+
+      - name: Upload artifact (generated types)
+        uses: actions/upload-artifact@v4
+        with:
+          name: proto-generated-types
+          path: systemupdate-web/generated
