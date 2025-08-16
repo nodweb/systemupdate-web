@@ -1,0 +1,3 @@
+# Example ignores (CVE IDs) with rationale and expiration date
+#CVE-2023-12345 # base image, low severity, fixed in next LTS, expires: 2025-12-31
+#CVE-2024-23456 # dev dependency only, not in runtime path, expires: 2025-10-01

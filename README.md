@@ -121,6 +121,14 @@ docker compose up -d otel-collector prometheus grafana
 
 Next, configure backend services to export OTLP traces/metrics to the collector. Defaults can point to `otel-collector:4317` (gRPC) or `:4318` (HTTP) inside Compose.
 
+## Quality Gates
+
+- Linters & Formatters: ruff + ruff-format + isort, ESLint + Prettier
+- Type Checking: mypy (strict-ish), TS strict mode (noImplicitAny, exactOptional, uncheckedIndex)
+- Pre-commit: `.pre-commit-config.yaml` available; run `pre-commit install`
+- Container Security: Trivy configured with `.trivyignore` (policy-based ignores, thresholds TBD)
+- SBOM: Generated; signing (Cosign) wiring prepared in CI (to be enabled)
+
 ## Backend APIs (M0/M1)
 
 ### Command Service (`services/command-service`)

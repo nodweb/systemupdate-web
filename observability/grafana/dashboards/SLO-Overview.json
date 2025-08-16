@@ -134,6 +134,48 @@
         {"expr": "avg(clamp_min(1 - (service:error_rate:ratio_rate5m / 0.005), 0))", "refId":"A"}
       ]
     }
+    , { "type": "row", "title": "RED/USE Overview", "gridPos": {"h":1,"w":24,"x":0,"y":45} }
+    , {
+      "type": "timeseries",
+      "title": "Request Rate (RPS) by Service",
+      "gridPos": {"h":8, "w":8, "x":0, "y":46},
+      "datasource": {"type":"prometheus","uid":"prometheus"},
+      "fieldConfig": {"defaults": {"unit":"reqps"}},
+      "targets": [
+        {"expr": "sum by(service_name)(rate(traces_spanmetrics_calls_total[5m]))", "legendFormat": "{{service_name}}", "refId":"A"}
+      ]
+    }
+    , {
+      "type": "timeseries",
+      "title": "Error Rate (RPS) by Service",
+      "gridPos": {"h":8, "w":8, "x":8, "y":46},
+      "datasource": {"type":"prometheus","uid":"prometheus"},
+      "fieldConfig": {"defaults": {"unit":"reqps"}},
+      "targets": [
+        {"expr": "sum by(service_name)(rate(traces_spanmetrics_calls_total{status_code!=\"STATUS_CODE_OK\"}[5m]))", "legendFormat": "{{service_name}}", "refId":"A"}
+      ]
+    }
+    , {
+      "type": "timeseries",
+      "title": "p95 Duration (ms) by Service",
+      "gridPos": {"h":8, "w":8, "x":16, "y":46},
+      "datasource": {"type":"prometheus","uid":"prometheus"},
+      "fieldConfig": {"defaults": {"unit":"ms"}},
+      "targets": [
+        {"expr": "histogram_quantile(0.95, sum by (le, service_name) (rate(traces_spanmetrics_duration_milliseconds_bucket[5m])))", "legendFormat": "{{service_name}}", "refId":"A"}
+      ]
+    }
+    , { "type": "row", "title": "Latency Heatmap", "gridPos": {"h":1,"w":24,"x":0,"y":54} }
+    , {
+      "type": "heatmap",
+      "title": "Latency Heatmap (Overall)",
+      "gridPos": {"h":10, "w":24, "x":0, "y":55},
+      "datasource": {"type":"prometheus","uid":"prometheus"},
+      "targets": [
+        {"expr": "sum by (le) (rate(traces_spanmetrics_duration_milliseconds_bucket[5m]))", "refId":"A"}
+      ],
+      "options": {"legend": {"show": true}}
+    }
   ],
   "refresh": "30s",
   "schemaVersion": 39,

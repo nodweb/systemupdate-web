@@ -11,6 +11,10 @@
     "noEmit": true,
     "jsx": "react-jsx",
     "strict": true,
+    "noImplicitAny": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "useUnknownInCatchVariables": true,
     "baseUrl": "."
   },
   "include": ["src"]
