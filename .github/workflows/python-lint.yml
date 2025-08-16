@@ -4,10 +4,12 @@ on:
   push:
     paths:
       - 'services/**'
+      - 'scripts/**'
       - '.github/workflows/python-lint.yml'
   pull_request:
     paths:
       - 'services/**'
+      - 'scripts/**'
       - '.github/workflows/python-lint.yml'
 
 jobs:
@@ -22,7 +24,6 @@ jobs:
       - name: Install ruff
         run: pipx install ruff
       - name: Run ruff
-        working-directory: systemupdate-web
         run: |
           ruff --version
           # Lint all Python in services/ and scripts/

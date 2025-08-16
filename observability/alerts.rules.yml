@@ -1,4 +1,39 @@
 groups:
+  - name: systemupdate-route-slo-alerts
+    interval: 30s
+    rules:
+      - alert: RouteLowAvailability
+        expr: route:availability:percent5m < 95
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low availability (<95%) on route {{ $labels.service_name }} {{ $labels.http_route }}"
+          description: |
+            Route availability dropped below 95% over 5m window.
+            current={{ $value }}% service={{ $labels.service_name }} route={{ $labels.http_route }}
+
+      - alert: RouteVeryLowAvailability
+        expr: route:availability:percent5m < 90
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Very low availability (<90%) on route {{ $labels.service_name }} {{ $labels.http_route }}"
+          description: |
+            Route availability dropped below 90% over 5m window.
+            current={{ $value }}% service={{ $labels.service_name }} route={{ $labels.http_route }}
+
+      - alert: RouteHighLatencyP95
+        expr: route:latency_p95_ms:5m > 500
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High p95 latency (>500ms) on route {{ $labels.service_name }} {{ $labels.http_route }}"
+          description: |
+            Route p95 latency exceeded 500ms over the last 5 minutes.
+            p95_ms={{ $value }} service={{ $labels.service_name }} route={{ $labels.http_route }}
   - name: systemupdate-service-alerts
     interval: 30s
     rules:

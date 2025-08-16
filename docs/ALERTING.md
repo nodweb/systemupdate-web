@@ -50,6 +50,20 @@ We provisioned a lightweight service to receive Alertmanager webhooks:
 docker logs -f su-notification
 ```
 
+## Slack Notifications (Grafana Alerting)
+We provision a Slack contact point in Grafana. To enable it:
+
+1) Obtain an Incoming Webhook URL from Slack.
+2) Export it for compose (Windows PowerShell):
+```powershell
+$env:GRAFANA_SLACK_WEBHOOK_URL = "https://hooks.slack.com/services/XXX/YYY/ZZZ"
+```
+3) Restart Grafana to apply provisioning:
+```powershell
+docker compose up -d grafana
+```
+Alerts with labels `severity=critical|warning` will be routed to Slack (see `observability/grafana/provisioning/alerting/notification-policies.yaml`).
+
 ## Recording Rules for SLO Metrics
 We added recording rules to precompute SLO metrics:
 

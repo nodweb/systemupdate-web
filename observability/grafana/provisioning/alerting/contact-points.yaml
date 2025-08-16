@@ -9,15 +9,14 @@ contactPoints:
           url: http://localhost:0/dev-null
           httpMethod: POST
         disableResolveMessage: false
-  # Example Slack (enable by replacing url and uncommenting)
-  # - orgId: 1
-  #   name: slack-notifications
-  #   receivers:
-  #     - uid: slack
-  #       type: slack
-  #       settings:
-  #         url: $__env{GRAFANA_SLACK_WEBHOOK_URL}
-  #         recipient: "#alerts"
-  #         username: grafana
-  #         mentionUsers: ""
-  #         icon_emoji: ":rotating_light:"
+  - orgId: 1
+    name: slack-notifications
+    receivers:
+      - uid: slack
+        type: slack
+        settings:
+          url: $__env{GRAFANA_SLACK_WEBHOOK_URL}
+          recipient: "#alerts"
+          username: grafana
+          mentionUsers: ""
+          icon_emoji: ":rotating_light:"

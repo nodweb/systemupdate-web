@@ -4,11 +4,11 @@ policies:
     receiver: default-devnull
     group_by: ['alertname', 'job']
     routes:
-      - receiver: default-devnull
+      - receiver: slack-notifications
         object_matchers:
           - ['severity', '=', 'critical']
         continue: false
-      - receiver: default-devnull
+      - receiver: slack-notifications
         object_matchers:
           - ['severity', '=', 'warning']
         continue: false
