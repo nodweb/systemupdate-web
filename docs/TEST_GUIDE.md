@@ -79,6 +79,59 @@ npm run dev
 
 CI builds/lints via `systemupdate-web/.github/workflows/frontend-ci.yml`.
 
+## Schemas Validation (Local)
+
+- Avro (requires Python and fastavro):
+
+```bash
+cd systemupdate-web
+python - << 'PY'
+import sys, glob
+from fastavro.schema import load_schema
+paths = glob.glob('libs/proto-schemas/avro/**/*.avsc', recursive=True)
+print('Found', len(paths), 'Avro files')
+for p in paths:
+    load_schema(p)
+    print('OK:', p)
+PY
+```
+
+- Protobuf (requires `protoc` in PATH):
+
+```bash
+cd systemupdate-web
+for f in $(ls libs/proto-schemas/proto/**/*.proto); do
+  echo "Validating $f" && protoc --proto_path=libs/proto-schemas/proto --descriptor_set_out=/dev/null "$f";
+done
+```
+
+## Proto Codegen (Local)
+
+From `systemupdate-web/`:
+
+```bash
+# prerequisites:
+# - protoc in PATH
+# - Node 18/20 and ts-proto installed: npm i -g ts-proto
+python scripts/codegen/proto_codegen.py
+# outputs:
+#   generated/ts
+#   generated/python
+```
+
+## Kafka / Testcontainers Tests (Local)
+
+Docker must be running. From `services/data-ingest-service/`:
+
+```powershell
+$env:PYTHONPATH='.'; .\.venv\Scripts\pytest -q tests/test_kafka_integration.py
+$env:PYTHONPATH='.'; .\.venv\Scripts\pytest -q tests/test_kafka_avro_roundtrip.py
+```
+
+Troubleshooting:
+- Set `DOCKER_AVAILABLE=0` to skip on environments without Docker.
+- First Docker start may take 1–2 minutes; re-run tests after engine is ready.
+
 ## Acceptance Checklist (Testing)
 
 - [ ] Per-service minimal tests pass locally (`pytest -q`) with `PYTHONPATH='.'` from the service folder

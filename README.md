@@ -26,6 +26,42 @@ npm run dev
 
 Build/typecheck/lint in CI via `frontend-ci.yml`.
 
+## Schemas (Contracts)
+
+- Location: `libs/proto-schemas/`
+  - Avro: `libs/proto-schemas/avro/`
+  - Protobuf: `libs/proto-schemas/proto/`
+- CI Validation:
+  - Avro: `.github/workflows/schemas-validate.yml` (fastavro)
+  - Protobuf: `.github/workflows/proto-validate.yml` (protoc)
+
+### Codegen
+
+- CI codegen (artifacts only): `.github/workflows/proto-codegen.yml`
+  - TS types → `generated/ts/`
+  - Python types → `generated/python/`
+  - Artifact name: `proto-generated-types`
+- Local codegen (from `systemupdate-web/`):
+
+```bash
+# prerequisites
+# - protoc installed on PATH
+# - Node 18/20 and ts-proto installed globally: npm i -g ts-proto
+python scripts/codegen/proto_codegen.py
+```
+
+Client scaffolds:
+- TS: `libs/client-ts/` (readme only; use outputs in `generated/ts`)
+- Python: `libs/client-py/` (readme only; use outputs in `generated/python`)
+
+## Kafka / Testcontainers Notes
+
+- Some integration tests use Testcontainers and require Docker running.
+- Example tests (data-ingest-service):
+  - `tests/test_kafka_integration.py` (produce/consume bytes)
+  - `tests/test_kafka_avro_roundtrip.py` (Avro schemaless encode/decode via `fastavro`)
+- Toggle skip via env: `DOCKER_AVAILABLE=0` to skip on limited runners.
+
 ## Quick Local Testing
 
 - Aggregate tests from repo root (using auth-service venv Python):
