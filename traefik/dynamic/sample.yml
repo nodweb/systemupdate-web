@@ -1,0 +1,28 @@
+http:
+  routers:
+    auth:
+      entryPoints: ["web"]
+      rule: "PathPrefix(`/api/auth`)"
+      service: auth
+    device:
+      entryPoints: ["web"]
+      rule: "PathPrefix(`/api/device`)"
+      service: device
+    ws_hub:
+      entryPoints: ["web"]
+      rule: "PathPrefix(`/ws`)"
+      service: ws_hub
+
+  services:
+    auth:
+      loadBalancer:
+        servers:
+          - url: "http://auth-service:8001"
+    device:
+      loadBalancer:
+        servers:
+          - url: "http://device-service:8003"
+    ws_hub:
+      loadBalancer:
+        servers:
+          - url: "http://ws-hub:8002"
