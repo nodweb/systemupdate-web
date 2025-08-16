@@ -1,0 +1,40 @@
+name: Schemas Validate (Protobuf)
+
+on:
+  push:
+    paths:
+      - 'systemupdate-web/libs/proto-schemas/**'
+      - 'systemupdate-web/.github/workflows/proto-validate.yml'
+  pull_request:
+    paths:
+      - 'systemupdate-web/libs/proto-schemas/**'
+      - 'systemupdate-web/.github/workflows/proto-validate.yml'
+
+jobs:
+  proto-validate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: systemupdate-web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Validate .proto files
+        run: |
+          set -e
+          shopt -s globstar
+          files=(libs/proto-schemas/proto/**/*.proto)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No proto files found. Skipping."
+            exit 0
+          fi
+          for f in ${files[@]}; do
+            echo "Compiling $f"
+            protoc --proto_path=libs/proto-schemas/proto --descriptor_set_out=/dev/null "$f"
+          done
