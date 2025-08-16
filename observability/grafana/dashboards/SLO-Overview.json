@@ -64,6 +64,27 @@
         {"expr": "histogram_quantile(0.95, sum by (le, service_name, http_route) (rate(traces_spanmetrics_duration_milliseconds_bucket[5m])))", "legendFormat": "{{service_name}} {{http_route}}", "refId":"A"}
       ]
     }
+    , { "type": "row", "title": "Route Burn Rate & Budget", "gridPos": {"h":1,"w":24,"x":0,"y":36} }
+    , {
+      "type": "timeseries",
+      "title": "Burn Rate (5m) by Route",
+      "gridPos": {"h":8, "w":12, "x":0, "y":37},
+      "datasource": {"type":"prometheus","uid":"prometheus"},
+      "fieldConfig": {"defaults": {"unit":"ratio"}},
+      "targets": [
+        {"expr": "route:error_rate:ratio_rate5m{http_route!~\"^/(health|metrics)(/.*)?$\"}", "legendFormat": "{{service_name}} {{http_route}}", "refId":"A"}
+      ]
+    }
+    , {
+      "type": "timeseries",
+      "title": "Error Budget Remaining (5m) by Route",
+      "gridPos": {"h":8, "w":12, "x":12, "y":37},
+      "datasource": {"type":"prometheus","uid":"prometheus"},
+      "fieldConfig": {"defaults": {"unit":"percentunit"}},
+      "targets": [
+        {"expr": "clamp_min(1 - (route:error_rate:ratio_rate5m{http_route!~\"^/(health|metrics)(/.*)?$\"} / 0.005), 0)", "legendFormat": "{{service_name}} {{http_route}}", "refId":"A"}
+      ]
+    }
     , { "type": "row", "title": "Error Budget & Burn Rate", "gridPos": {"h":1,"w":24,"x":0,"y":24} }
     , {
       "type": "stat",

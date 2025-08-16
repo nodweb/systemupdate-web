@@ -4,6 +4,13 @@
 [![SBOM & Security](https://github.com/nodweb/systemupdate-web/actions/workflows/sbom-security.yml/badge.svg)](https://github.com/nodweb/systemupdate-web/actions/workflows/sbom-security.yml)
 [![Python Codegen](https://github.com/nodweb/systemupdate-web/actions/workflows/codegen-python.yml/badge.svg)](https://github.com/nodweb/systemupdate-web/actions/workflows/codegen-python.yml)
 [![Markdown Lint](https://github.com/nodweb/systemupdate-web/actions/workflows/markdownlint.yml/badge.svg)](https://github.com/nodweb/systemupdate-web/actions/workflows/markdownlint.yml)
+[![Python Lint](https://github.com/nodweb/systemupdate-web/actions/workflows/python-lint.yml/badge.svg)](https://github.com/nodweb/systemupdate-web/actions/workflows/python-lint.yml)
+[![TS Lint](https://github.com/nodweb/systemupdate-web/actions/workflows/ts-lint.yml/badge.svg)](https://github.com/nodweb/systemupdate-web/actions/workflows/ts-lint.yml)
+[![Frontend CI/Lint](https://github.com/nodweb/systemupdate-web/actions/workflows/frontend-lint.yml/badge.svg)](https://github.com/nodweb/systemupdate-web/actions/workflows/frontend-lint.yml)
+[![Schemas Validate](https://github.com/nodweb/systemupdate-web/actions/workflows/schemas-validate.yml/badge.svg)](https://github.com/nodweb/systemupdate-web/actions/workflows/schemas-validate.yml)
+[![Proto Validate](https://github.com/nodweb/systemupdate-web/actions/workflows/proto-validate.yml/badge.svg)](https://github.com/nodweb/systemupdate-web/actions/workflows/proto-validate.yml)
+[![CodeQL](https://github.com/nodweb/systemupdate-web/actions/workflows/codeql.yml/badge.svg)](https://github.com/nodweb/systemupdate-web/actions/workflows/codeql.yml)
+[![Secret Scan](https://github.com/nodweb/systemupdate-web/actions/workflows/secrets.yml/badge.svg)](https://github.com/nodweb/systemupdate-web/actions/workflows/secrets.yml)
 
 Enterprise-grade web stack for remote Android device management.
 
