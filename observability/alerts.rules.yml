@@ -34,6 +34,34 @@ groups:
           description: |
             Route p95 latency exceeded 500ms over the last 5 minutes.
             p95_ms={{ $value }} service={{ $labels.service_name }} route={{ $labels.http_route }}
+
+      # Route-level burn rate alerts for 99.5% SLO (budget 0.005)
+      - alert: RouteFastBurnRate
+        expr: route:error_rate:ratio_rate5m{http_route!~"^/(health|metrics)(/.*)?$"} > (14 * 0.005)
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Fast burn rate on route {{ $labels.service_name }} {{ $labels.http_route }} (>14x over 5m)"
+          description: |
+            Route is burning error budget rapidly.
+            error_rate_5m={{ $value }} budget={{ 0.005 }} service={{ $labels.service_name }} route={{ $labels.http_route }}
+
+      - alert: RouteSlowBurnRate
+        expr: |
+          (
+            sum by(service_name, http_route)(rate(traces_spanmetrics_calls_total{status_code!="STATUS_CODE_OK", http_route!~"^/(health|metrics)(/.*)?$"}[1h]))
+            /
+            clamp_min(sum by(service_name, http_route)(rate(traces_spanmetrics_calls_total{http_route!~"^/(health|metrics)(/.*)?$"}[1h])), 1e-9)
+          ) > (6 * 0.005)
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Slow burn rate on route {{ $labels.service_name }} {{ $labels.http_route }} (>6x over 1h)"
+          description: |
+            Route is consuming error budget steadily.
+            error_rate_1h={{ $value }} budget={{ 0.005 }} service={{ $labels.service_name }} route={{ $labels.http_route }}
   - name: systemupdate-service-alerts
     interval: 30s
     rules:
