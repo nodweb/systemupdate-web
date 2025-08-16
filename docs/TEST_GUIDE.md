@@ -64,6 +64,21 @@ $env:PYTHONPATH='.'; .\.venv\Scripts\pytest -q
 - The codebase uses contract tests (Schemathesis) and may pull OpenAPI/AsyncAPI specs from `libs/proto-schemas/`.
 - ws-hub uses async websocket tests; ensure dependencies from `requirements.txt` are installed.
 
+## Frontend Quick Start
+
+Location: `systemupdate-web/frontend/`
+
+```bash
+npm install
+npm run dev
+```
+
+- Lint: `npm run lint`
+- Typecheck: `npm run typecheck`
+- Build: `npm run build`
+
+CI builds/lints via `systemupdate-web/.github/workflows/frontend-ci.yml`.
+
 ## Acceptance Checklist (Testing)
 
 - [ ] Per-service minimal tests pass locally (`pytest -q`) with `PYTHONPATH='.'` from the service folder

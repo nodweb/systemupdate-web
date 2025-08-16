@@ -15,6 +15,17 @@ Enterprise-grade web stack for remote Android device management.
 - Local dev via Docker Compose (to be added in M0)
 - CI: GitHub Actions (lint/test/build) (placeholder)
 
+### Frontend Quick Start
+
+From `systemupdate-web/frontend/`:
+
+```bash
+npm install
+npm run dev
+```
+
+Build/typecheck/lint in CI via `frontend-ci.yml`.
+
 ## Quick Local Testing
 
 - Aggregate tests from repo root (using auth-service venv Python):
@@ -37,6 +48,12 @@ $env:PYTHONPATH='.'; pushd services/ws-hub; .\.venv\Scripts\pytest -q; popd
 ```
 
 More details: `docs/TEST_GUIDE.md`.
+
+## Gateway (Traefik) Notes
+
+- Static config: `traefik/traefik.yml` (loads dynamic from `/etc/traefik/dynamic`)
+- Dynamic sample routes/services: `traefik/dynamic/sample.yml`
+- In Compose prod, Traefik mounts `traefik/dynamic/` to `/etc/traefik/dynamic`.
 
 ## Milestones
 
