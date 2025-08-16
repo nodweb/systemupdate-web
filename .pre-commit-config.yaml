@@ -19,21 +19,21 @@ repos:
     hooks:
       - id: prettier
         additional_dependencies: ["prettier@3.3.2", "prettier-plugin-organize-imports@3.2.4"]
-        files: "(frontend|libs/shared-ts)/.*\.(ts|tsx|js|jsx|json|css|md)"
+        files: '(frontend|libs/shared-ts)/.*\.(ts|tsx|js|jsx|json|css|md)'
   - repo: https://github.com/eslint/eslint
     rev: v9.7.0
     hooks:
       - id: eslint
         additional_dependencies:
           - eslint@9.7.0
-          - @typescript-eslint/parser@7.16.1
-          - @typescript-eslint/eslint-plugin@7.16.1
+          - '@typescript-eslint/parser@7.16.1'
+          - '@typescript-eslint/eslint-plugin@7.16.1'
           - eslint-config-prettier@9.1.0
           - eslint-plugin-import@2.29.1
           - typescript@5.4.5
-        files: "(frontend|libs/shared-ts)/.*\.(ts|tsx|js|jsx)"
+        files: '(frontend|libs/shared-ts)/.*\.(ts|tsx|js|jsx)'
   - repo: https://github.com/DavidAnson/markdownlint-cli2
     rev: v0.14.0
     hooks:
       - id: markdownlint-cli2
-        files: ".*\.md$"
+        files: '.*\.md$'
