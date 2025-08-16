@@ -1,0 +1,77 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Accepted Spans (5m rate)",
+      "gridPos": {"h": 5, "w": 6, "x": 0, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "sum(rate(otelcol_receiver_accepted_spans[5m]))", "refId": "A"}]
+    },
+    {
+      "type": "stat",
+      "title": "Refused Spans (5m rate)",
+      "gridPos": {"h": 5, "w": 6, "x": 6, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "sum(rate(otelcol_receiver_refused_spans[5m]))", "refId": "A"}]
+    },
+    {
+      "type": "stat",
+      "title": "Exporter Sent Spans (5m rate)",
+      "gridPos": {"h": 5, "w": 6, "x": 12, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "sum(rate(otelcol_exporter_sent_spans[5m]))", "refId": "A"}]
+    },
+    {
+      "type": "stat",
+      "title": "Exporter Failed Spans (5m rate)",
+      "gridPos": {"h": 5, "w": 6, "x": 18, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "sum(rate(otelcol_exporter_send_failed_spans[5m]))", "refId": "A"}]
+    },
+    {
+      "type": "timeseries",
+      "title": "Accepted vs Exported Spans",
+      "gridPos": {"h": 9, "w": 24, "x": 0, "y": 5},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "1/s"}},
+      "targets": [
+        {"expr": "sum(rate(otelcol_receiver_accepted_spans[5m]))", "legendFormat": "accepted", "refId": "A"},
+        {"expr": "sum(rate(otelcol_exporter_sent_spans[5m]))", "legendFormat": "sent", "refId": "B"}
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Accepted Spans by Receiver",
+      "gridPos": {"h": 9, "w": 24, "x": 0, "y": 14},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "1/s"}},
+      "targets": [
+        {"expr": "sum by(receiver)(rate(otelcol_receiver_accepted_spans[5m]))", "legendFormat": "{{receiver}}", "refId": "A"}
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Sent Spans by Exporter",
+      "gridPos": {"h": 9, "w": 24, "x": 0, "y": 23},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "1/s"}},
+      "targets": [
+        {"expr": "sum by(exporter)(rate(otelcol_exporter_sent_spans[5m]))", "legendFormat": "{{exporter}}", "refId": "A"}
+      ]
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": ["systemupdate", "otel", "tracing"],
+  "templating": {"list": []},
+  "time": {"from": "now-6h", "to": "now"},
+  "title": "Tracing Pipeline Overview",
+  "uid": "tracing-pipeline-overview"
+}
