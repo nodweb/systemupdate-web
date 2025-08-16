@@ -72,7 +72,7 @@ services:
     volumes:
       - minio:/data
     healthcheck:
-      test: ["CMD-SHELL", "mc alias set local http://localhost:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD >/dev/null 2>&1 && mc ls local >/dev/null 2>&1"]
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/minio/health/ready >/dev/null || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 12
@@ -131,6 +131,21 @@ services:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+
+  data-ingest-service:
+    build: ./services/data-ingest-service
+    container_name: su-data-ingest
+    environment:
+      PORT: 8005
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8005"]
+    ports:
+      - "8005:8005"
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      kafka:
         condition: service_healthy
 
 #  gateway:
