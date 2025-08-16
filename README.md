@@ -7,7 +7,7 @@
 
 Enterprise-grade web stack for remote Android device management.
 
-- Architecture: see `../docs/SYSTEMUPDATE_WEB_ARCHITECTURE.md`
+- Architecture: see `docs/SYSTEMUPDATE_WEB_ARCHITECTURE.md`
 - Phases: 2 (Backend), 3 (Frontend), 4 (Infra)
 
 ## Getting Started (M0)

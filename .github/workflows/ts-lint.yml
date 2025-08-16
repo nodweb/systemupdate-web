@@ -1,0 +1,35 @@
+name: TypeScript Lint
+
+on:
+  push:
+    paths:
+      - 'systemupdate-web/libs/shared-ts/**'
+      - 'systemupdate-web/.github/workflows/ts-lint.yml'
+  pull_request:
+    paths:
+      - 'systemupdate-web/libs/shared-ts/**'
+      - 'systemupdate-web/.github/workflows/ts-lint.yml'
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: systemupdate-web/libs/shared-ts
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: ESLint
+        run: npm run lint
+
+      - name: Prettier Check
+        run: npm run format:check
