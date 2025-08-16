@@ -38,6 +38,7 @@ Build/typecheck/lint in CI via `frontend-ci.yml`.
 - CI Validation:
   - Avro: `.github/workflows/schemas-validate.yml` (fastavro)
   - Protobuf: `.github/workflows/proto-validate.yml` (protoc)
+  - Note: Local Schema Registry available via Compose at `http://localhost:8081` (Confluent)
 
 ### Codegen
 
@@ -75,6 +76,16 @@ Client scaffolds:
   - `tests/test_kafka_integration.py` (produce/consume bytes)
   - `tests/test_kafka_avro_roundtrip.py` (Avro schemaless encode/decode via `fastavro`)
 - Toggle skip via env: `DOCKER_AVAILABLE=0` to skip on limited runners.
+
+## Local Services (Compose)
+
+- Postgres: `localhost:5432` (user/pass/db: systemupdate)
+- Redis: `localhost:6379`
+- Kafka: `localhost:9092` (Bitnami)
+- Schema Registry: `http://localhost:8081` (Confluent)
+- MinIO: `http://localhost:9000` (console: `http://localhost:9001`, user/pass: minioadmin)
+
+All have basic healthchecks; see `docker-compose.yml` for details.
 
 ## Quick Local Testing
 
