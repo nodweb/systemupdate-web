@@ -12,6 +12,9 @@ connectors:
       - http.method
       - http.route
       - http.status_code
+      - peer.service
+      - db.system
+      - messaging.system
     namespace: traces_spanmetrics
     histogram:
       explicit:

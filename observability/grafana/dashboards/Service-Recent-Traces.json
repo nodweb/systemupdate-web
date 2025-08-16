@@ -18,43 +18,58 @@
       "options": {
         "query": {
           "queryType": "traceql",
-          "query": "{ service.name = \"${service}\" } | last_over_time(1h) | limit 50"
+          "query": "{ service.name = \"${service}\"${http_method:raw}\n${http_route:raw}\n${http_status_code:raw} } | last_over_time(1h) | limit 50"
         },
         "showSpanBar": true,
         "search": {"type": "traceql"}
       },
       "targets": [
-        {"datasource": {"type": "tempo", "uid": "tempo"}, "queryType": "traceql", "query": "{ service.name = \"${service}\" } | last_over_time(1h) | limit 50", "refId": "A"}
+        {"datasource": {"type": "tempo", "uid": "tempo"}, "queryType": "traceql", "query": "{ service.name = \"${service}\"${http_method:raw}${http_route:raw}${http_status_code:raw} } | last_over_time(1h) | limit 50", "refId": "A"}
+      ]
+    },
+    {
+      "type": "trace",
+      "title": "Errors Only (1h) - ${service}",
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 13},
+      "datasource": {"type": "tempo", "uid": "tempo"},
+      "options": {
+        "query": {
+          "queryType": "traceql",
+          "query": "{ service.name = \"${service}\" and status != ok${http_method:raw}${http_route:raw}${http_status_code:raw} } | last_over_time(1h) | limit 50"
+        }
+      },
+      "targets": [
+        {"datasource": {"type": "tempo", "uid": "tempo"}, "queryType": "traceql", "query": "{ service.name = \"${service}\" and status != ok${http_method:raw}${http_route:raw}${http_status_code:raw} } | last_over_time(1h) | limit 50", "refId": "A"}
       ]
     },
     {
       "type": "row",
       "title": "Quick Picks",
-      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 13}
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 21}
     },
     {
       "type": "trace",
       "title": "command-service (1h)",
-      "gridPos": {"h": 10, "w": 8, "x": 0, "y": 14},
+      "gridPos": {"h": 10, "w": 8, "x": 0, "y": 22},
       "datasource": {"type": "tempo", "uid": "tempo"},
-      "options": {"query": {"queryType": "traceql", "query": "{ service.name = \"command-service\" } | last_over_time(1h) | limit 25"}},
-      "targets": [{"datasource": {"type": "tempo", "uid": "tempo"}, "queryType": "traceql", "query": "{ service.name = \"command-service\" } | last_over_time(1h) | limit 25", "refId": "A"}]
+      "options": {"query": {"queryType": "traceql", "query": "{ service.name = \"command-service\"${http_method:raw}${http_route:raw}${http_status_code:raw} } | last_over_time(1h) | limit 25"}},
+      "targets": [{"datasource": {"type": "tempo", "uid": "tempo"}, "queryType": "traceql", "query": "{ service.name = \"command-service\"${http_method:raw}${http_route:raw}${http_status_code:raw} } | last_over_time(1h) | limit 25", "refId": "A"}]
     },
     {
       "type": "trace",
       "title": "device-service (1h)",
-      "gridPos": {"h": 10, "w": 8, "x": 8, "y": 14},
+      "gridPos": {"h": 10, "w": 8, "x": 8, "y": 22},
       "datasource": {"type": "tempo", "uid": "tempo"},
-      "options": {"query": {"queryType": "traceql", "query": "{ service.name = \"device-service\" } | last_over_time(1h) | limit 25"}},
-      "targets": [{"datasource": {"type": "tempo", "uid": "tempo"}, "queryType": "traceql", "query": "{ service.name = \"device-service\" } | last_over_time(1h) | limit 25", "refId": "A"}]
+      "options": {"query": {"queryType": "traceql", "query": "{ service.name = \"device-service\"${http_method:raw}${http_route:raw}${http_status_code:raw} } | last_over_time(1h) | limit 25"}},
+      "targets": [{"datasource": {"type": "tempo", "uid": "tempo"}, "queryType": "traceql", "query": "{ service.name = \"device-service\"${http_method:raw}${http_route:raw}${http_status_code:raw} } | last_over_time(1h) | limit 25", "refId": "A"}]
     },
     {
       "type": "trace",
       "title": "analytics-service (1h)",
-      "gridPos": {"h": 10, "w": 8, "x": 16, "y": 14},
+      "gridPos": {"h": 10, "w": 8, "x": 16, "y": 22},
       "datasource": {"type": "tempo", "uid": "tempo"},
-      "options": {"query": {"queryType": "traceql", "query": "{ service.name = \"analytics-service\" } | last_over_time(1h) | limit 25"}},
-      "targets": [{"datasource": {"type": "tempo", "uid": "tempo"}, "queryType": "traceql", "query": "{ service.name = \"analytics-service\" } | last_over_time(1h) | limit 25", "refId": "A"}]
+      "options": {"query": {"queryType": "traceql", "query": "{ service.name = \"analytics-service\"${http_method:raw}${http_route:raw}${http_status_code:raw} } | last_over_time(1h) | limit 25"}},
+      "targets": [{"datasource": {"type": "tempo", "uid": "tempo"}, "queryType": "traceql", "query": "{ service.name = \"analytics-service\"${http_method:raw}${http_route:raw}${http_status_code:raw} } | last_over_time(1h) | limit 25", "refId": "A"}]
     }
   ],
   "refresh": "30s",
@@ -72,6 +87,33 @@
         "refresh": 1,
         "includeAll": false,
         "multi": false
+      },
+      {
+        "name": "http_method",
+        "type": "textbox",
+        "label": "HTTP Method (optional)",
+        "query": "",
+        "description": "e.g., GET or TraceQL fragment like: and http.method=\"GET\"",
+        "hide": 0,
+        "current": {"text": "", "value": ""}
+      },
+      {
+        "name": "http_route",
+        "type": "textbox",
+        "label": "HTTP Route (optional)",
+        "query": "",
+        "description": "TraceQL fragment like: and http.route=\"/demo/downstream\"",
+        "hide": 0,
+        "current": {"text": "", "value": ""}
+      },
+      {
+        "name": "http_status_code",
+        "type": "textbox",
+        "label": "HTTP Status (optional)",
+        "query": "",
+        "description": "TraceQL fragment like: and http.status_code=\"500\"",
+        "hide": 0,
+        "current": {"text": "", "value": ""}
       }
     ]
   },
