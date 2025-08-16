@@ -3,7 +3,7 @@ groups:
     interval: 30s
     rules:
       - alert: RouteLowAvailability
-        expr: route:availability:percent5m < 95
+        expr: route:availability:percent5m{http_route!~"^/(health|metrics)(/.*)?$"} < 95
         for: 5m
         labels:
           severity: warning
@@ -14,7 +14,7 @@ groups:
             current={{ $value }}% service={{ $labels.service_name }} route={{ $labels.http_route }}
 
       - alert: RouteVeryLowAvailability
-        expr: route:availability:percent5m < 90
+        expr: route:availability:percent5m{http_route!~"^/(health|metrics)(/.*)?$"} < 90
         for: 5m
         labels:
           severity: critical
@@ -25,7 +25,7 @@ groups:
             current={{ $value }}% service={{ $labels.service_name }} route={{ $labels.http_route }}
 
       - alert: RouteHighLatencyP95
-        expr: route:latency_p95_ms:5m > 500
+        expr: route:latency_p95_ms:5m{http_route!~"^/(health|metrics)(/.*)?$"} > 500
         for: 5m
         labels:
           severity: warning
@@ -44,6 +44,36 @@ groups:
             /
             clamp_min(sum by(service_name)(rate(traces_spanmetrics_calls_total[5m])), 1e-9)
           ) > 0.05
+
+      # Burn rate alerts for 99.5% SLO (error budget = 0.5% => 0.005)
+      # Fast burn: 5m window > 14x budget (~consume budget in ~1h)
+      - alert: ServiceFastBurnRate
+        expr: service:error_rate:ratio_rate5m > (14 * 0.005)
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Fast burn rate on {{ $labels.service_name }} (>14x budget over 5m)"
+          description: |
+            Service is burning error budget rapidly.
+            error_rate_5m={{ $value }} budget={{ 0.005 }} service={{ $labels.service_name }}
+
+      # Slow burn: 1h window > 6x budget (~consume budget in few hours)
+      - alert: ServiceSlowBurnRate
+        expr: |
+          (
+            sum by(service_name)(rate(traces_spanmetrics_calls_total{status_code!="STATUS_CODE_OK"}[1h]))
+            /
+            clamp_min(sum by(service_name)(rate(traces_spanmetrics_calls_total[1h])), 1e-9)
+          ) > (6 * 0.005)
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Slow burn rate on {{ $labels.service_name }} (>6x budget over 1h)"
+          description: |
+            Service is consuming error budget steadily.
+            error_rate_1h={{ $value }} budget={{ 0.005 }} service={{ $labels.service_name }}
         for: 2m
         labels:
           severity: warning
