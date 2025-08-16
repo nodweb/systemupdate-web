@@ -1,0 +1,81 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "links": [],
+  "panels": [
+    {
+      "type": "row",
+      "title": "By Service",
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0}
+    },
+    {
+      "type": "trace",
+      "title": "Recent Traces (last 1h) - ${service}",
+      "gridPos": {"h": 12, "w": 24, "x": 0, "y": 1},
+      "datasource": {"type": "tempo", "uid": "tempo"},
+      "options": {
+        "query": {
+          "queryType": "traceql",
+          "query": "{ service.name = \"${service}\" } | last_over_time(1h) | limit 50"
+        },
+        "showSpanBar": true,
+        "search": {"type": "traceql"}
+      },
+      "targets": [
+        {"datasource": {"type": "tempo", "uid": "tempo"}, "queryType": "traceql", "query": "{ service.name = \"${service}\" } | last_over_time(1h) | limit 50", "refId": "A"}
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Quick Picks",
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 13}
+    },
+    {
+      "type": "trace",
+      "title": "command-service (1h)",
+      "gridPos": {"h": 10, "w": 8, "x": 0, "y": 14},
+      "datasource": {"type": "tempo", "uid": "tempo"},
+      "options": {"query": {"queryType": "traceql", "query": "{ service.name = \"command-service\" } | last_over_time(1h) | limit 25"}},
+      "targets": [{"datasource": {"type": "tempo", "uid": "tempo"}, "queryType": "traceql", "query": "{ service.name = \"command-service\" } | last_over_time(1h) | limit 25", "refId": "A"}]
+    },
+    {
+      "type": "trace",
+      "title": "device-service (1h)",
+      "gridPos": {"h": 10, "w": 8, "x": 8, "y": 14},
+      "datasource": {"type": "tempo", "uid": "tempo"},
+      "options": {"query": {"queryType": "traceql", "query": "{ service.name = \"device-service\" } | last_over_time(1h) | limit 25"}},
+      "targets": [{"datasource": {"type": "tempo", "uid": "tempo"}, "queryType": "traceql", "query": "{ service.name = \"device-service\" } | last_over_time(1h) | limit 25", "refId": "A"}]
+    },
+    {
+      "type": "trace",
+      "title": "analytics-service (1h)",
+      "gridPos": {"h": 10, "w": 8, "x": 16, "y": 14},
+      "datasource": {"type": "tempo", "uid": "tempo"},
+      "options": {"query": {"queryType": "traceql", "query": "{ service.name = \"analytics-service\" } | last_over_time(1h) | limit 25"}},
+      "targets": [{"datasource": {"type": "tempo", "uid": "tempo"}, "queryType": "traceql", "query": "{ service.name = \"analytics-service\" } | last_over_time(1h) | limit 25", "refId": "A"}]
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": ["systemupdate", "traces", "services"],
+  "templating": {
+    "list": [
+      {
+        "name": "service",
+        "type": "query",
+        "label": "Service",
+        "datasource": {"type": "tempo", "uid": "tempo"},
+        "query": "label_values(service.name)",
+        "refresh": 1,
+        "includeAll": false,
+        "multi": false
+      }
+    ]
+  },
+  "time": {"from": "now-1h", "to": "now"},
+  "title": "Service Recent Traces",
+  "uid": "svc-recent-traces"
+}
