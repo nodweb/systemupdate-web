@@ -15,6 +15,29 @@ Enterprise-grade web stack for remote Android device management.
 - Local dev via Docker Compose (to be added in M0)
 - CI: GitHub Actions (lint/test/build) (placeholder)
 
+## Quick Local Testing
+
+- Aggregate tests from repo root (using auth-service venv Python):
+
+```powershell
+services\auth-service\.venv\Scripts\python -m pytest -q
+```
+
+- Per-service quick run:
+
+```powershell
+# Auth Service
+$env:PYTHONPATH='.'; pushd services/auth-service; .\.venv\Scripts\pytest -q; popd
+
+# Device Service
+$env:PYTHONPATH='.'; pushd services/device-service; .\.venv\Scripts\pytest -q; popd
+
+# WS Hub
+$env:PYTHONPATH='.'; pushd services/ws-hub; .\.venv\Scripts\pytest -q; popd
+```
+
+More details: `docs/TEST_GUIDE.md`.
+
 ## Milestones
 
 - M0: Scaffold + CI + local dev
