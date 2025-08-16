@@ -4,9 +4,13 @@ receivers:
       http:
       grpc:
 
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
 exporters:
   logging:
-    loglevel: debug
+    verbosity: detailed
   prometheus:
     endpoint: 0.0.0.0:8889
 
@@ -14,6 +18,7 @@ service:
   telemetry:
     metrics:
       address: 0.0.0.0:8888
+  extensions: [health_check]
   pipelines:
     traces:
       receivers: [otlp]

@@ -118,6 +118,9 @@ services:
     container_name: su-auth
     environment:
       PORT: 8001
+      OTEL_TRACES_ENABLE: "1"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_SERVICE_NAME: auth-service
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001"]
     ports:
       - "8001:8001"
@@ -133,6 +136,9 @@ services:
     container_name: su-ws-hub
     environment:
       PORT: 8002
+      OTEL_TRACES_ENABLE: "1"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_SERVICE_NAME: ws-hub
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8002"]
     ports:
       - "8002:8002"
@@ -146,6 +152,9 @@ services:
     container_name: su-device
     environment:
       PORT: 8003
+      OTEL_TRACES_ENABLE: "1"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_SERVICE_NAME: device-service
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8003"]
     ports:
       - "8003:8003"
@@ -166,6 +175,9 @@ services:
       POSTGRES_USER: systemupdate
       POSTGRES_PASSWORD: systemupdate
       POSTGRES_DB: systemupdate
+      OTEL_TRACES_ENABLE: "1"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_SERVICE_NAME: command-service
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8004"]
     ports:
       - "8004:8004"
@@ -183,6 +195,9 @@ services:
       PORT: 8005
       KAFKA_BOOTSTRAP: kafka:9092
       INGEST_TOPIC: device.ingest.raw
+      OTEL_TRACES_ENABLE: "1"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_SERVICE_NAME: data-ingest-service
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8005"]
     ports:
       - "8005:8005"
@@ -198,6 +213,9 @@ services:
     container_name: su-analytics
     environment:
       PORT: 8006
+      OTEL_TRACES_ENABLE: "1"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_SERVICE_NAME: analytics-service
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8006"]
     ports:
       - "8006:8006"
@@ -221,11 +239,6 @@ services:
     ports:
       - "4317:4317"  # OTLP/gRPC
       - "4318:4318"  # OTLP/HTTP
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:13133/ || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
 
 volumes:
   pgdata:
