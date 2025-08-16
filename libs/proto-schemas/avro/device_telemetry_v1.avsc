@@ -1,0 +1,15 @@
+{
+  "type": "record",
+  "name": "DeviceTelemetryV1",
+  "namespace": "systemupdate.events.device",
+  "fields": [
+    { "name": "deviceId", "type": "string" },
+    { "name": "ts", "type": {"type": "long", "logicalType": "timestamp-millis"} },
+    { "name": "battery", "type": ["null", "int"], "default": null },
+    { "name": "temperature", "type": ["null", "float"], "default": null },
+    { "name": "network", "type": ["null", {"type": "record", "name": "NetworkInfo", "fields": [
+      { "name": "type", "type": ["null", "string"], "default": null },
+      { "name": "rssi", "type": ["null", "int"], "default": null }
+    ]}], "default": null }
+  ]
+}

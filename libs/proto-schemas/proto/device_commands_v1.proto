@@ -1,0 +1,11 @@
+syntax = "proto3";
+package systemupdate.commands.v1;
+
+// Simple command schema example
+message DeviceCommand {
+  string command_id = 1;
+  string device_id = 2;
+  string name = 3; // e.g., "reboot", "install_update"
+  map<string, string> params = 4;
+  int64 ts = 5; // epoch millis
+}
