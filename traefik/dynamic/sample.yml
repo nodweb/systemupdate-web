@@ -12,6 +12,18 @@ http:
       entryPoints: ["web"]
       rule: "PathPrefix(`/ws`)"
       service: ws_hub
+    command:
+      entryPoints: ["web"]
+      rule: "PathPrefix(`/api/command`)"
+      service: command
+    ingest:
+      entryPoints: ["web"]
+      rule: "PathPrefix(`/api/ingest`)"
+      service: ingest
+    analytics:
+      entryPoints: ["web"]
+      rule: "PathPrefix(`/api/analytics`)"
+      service: analytics
 
   services:
     auth:
@@ -26,3 +38,15 @@ http:
       loadBalancer:
         servers:
           - url: "http://ws-hub:8002"
+    command:
+      loadBalancer:
+        servers:
+          - url: "http://command-service:8004"
+    ingest:
+      loadBalancer:
+        servers:
+          - url: "http://data-ingest-service:8005"
+    analytics:
+      loadBalancer:
+        servers:
+          - url: "http://analytics-service:8006"
