@@ -1,19 +1,23 @@
-import os
 import asyncio
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, Field
-from typing import List, Dict, Optional
-from datetime import datetime, timezone
+import json
+import os
 import uuid
+from datetime import datetime, timezone
+from typing import Dict, List, Optional
+
 import httpx
+from fastapi import FastAPI, Header, HTTPException, Response
+from pydantic import BaseModel, Field
 
 app = FastAPI(title="Command Service", version="0.3.0")
 
 # OpenTelemetry init (no-op if not configured via env), with safe tracer fallback
 try:
-    from .otel import init_tracing  # local helper sets provider + FastAPI instrumentation
     from opentelemetry import trace
     from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+
+    from .otel import \
+      init_tracing  # local helper sets provider + FastAPI instrumentation
 
     init_tracing(service_name="command-service", app=app)
     tracer = trace.get_tracer(__name__)
@@ -22,14 +26,18 @@ try:
     except Exception:
         pass
 except Exception:
+
     class _Noop:
         def __enter__(self):
             return self
+
         def __exit__(self, *args):
             return False
+
     class _Tracer:
         def start_as_current_span(self, name):
             return _Noop()
+
     tracer = _Tracer()
 
 
@@ -56,6 +64,8 @@ class Command(BaseModel):
 # naive in-memory store for M0
 COMMANDS: Dict[str, Command] = {}
 OUTBOX: asyncio.Queue = asyncio.Queue()
+# simple in-memory idempotency cache for fallback mode
+IDEMPOTENCY: Dict[str, str] = {}
 KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "kafka:9092")
 KAFKA_TOPIC = os.getenv("COMMAND_EVENTS_TOPIC", "command.events")
 publisher_task: asyncio.Task | None = None
@@ -74,13 +84,40 @@ except Exception:
 
 
 @app.post("/commands", response_model=Command, status_code=201)
-async def create_command(body: CommandCreate):
+async def create_command(
+    body: CommandCreate,
+    x_idempotency_key: Optional[str] = Header(default=None, alias="x-idempotency-key"),
+):
     with tracer.start_as_current_span("create_command"):
         cid = f"cmd-{uuid.uuid4().hex[:8]}"
         now = datetime.now(timezone.utc).isoformat()
-        cmd = Command(id=cid, device_id=body.device_id, name=body.name, payload=body.payload, created_at=now)
+        cmd = Command(
+            id=cid,
+            device_id=body.device_id,
+            name=body.name,
+            payload=body.payload,
+            created_at=now,
+        )
         # persist if DB available, else in-memory fallback
         if DB_DSN is not None and psycopg is not None:
+            # DB idempotency check
+            if x_idempotency_key:
+                async with await psycopg.AsyncConnection.connect(DB_DSN) as aconn:  # type: ignore
+                    async with aconn.cursor(row_factory=dict_row) as cur:
+                        await cur.execute(
+                            "select command_id from idempotency where key=%s",
+                            (x_idempotency_key,),
+                        )
+                        row = await cur.fetchone()
+                        if row:
+                            # return existing command
+                            await cur.execute(
+                                "select id, device_id, name, payload, created_at, status from commands where id=%s",
+                                (row["command_id"],),
+                            )
+                            existing = await cur.fetchone()
+                            if existing:
+                                return existing
             async with await psycopg.AsyncConnection.connect(DB_DSN) as aconn:  # type: ignore
                 async with aconn.cursor() as cur:
                     await cur.execute(
@@ -91,25 +128,75 @@ async def create_command(body: CommandCreate):
                         """,
                         (cid, body.device_id, body.name, body.payload, now, "queued"),
                     )
+                    if x_idempotency_key:
+                        await cur.execute(
+                            """
+                            insert into idempotency(key, command_id)
+                            values (%s, %s)
+                            on conflict (key) do nothing
+                            """,
+                            (x_idempotency_key, cid),
+                        )
                     await cur.execute(
                         """
                         insert into outbox(kind, aggregate_id, payload)
                         values (%s, %s, %s)
                         """,
-                        ("command.created", cid, {"id": cid, "device_id": body.device_id, "name": body.name, "payload": body.payload, "created_at": now}),
+                        (
+                            "command.created",
+                            cid,
+                            {
+                                "id": cid,
+                                "device_id": body.device_id,
+                                "name": body.name,
+                                "payload": body.payload,
+                                "created_at": now,
+                            },
+                        ),
                     )
                     await aconn.commit()
         else:
+            # in-memory idempotency
+            if x_idempotency_key and x_idempotency_key in IDEMPOTENCY:
+                existing_id = IDEMPOTENCY[x_idempotency_key]
+                if existing_id in COMMANDS:
+                    return COMMANDS[existing_id]
             COMMANDS[cid] = cmd
-            await OUTBOX.put({
-                "type": "command.created",
-                "id": cid,
-                "device_id": body.device_id,
-                "name": body.name,
-                "payload": body.payload,
-                "created_at": now,
-            })
+            if x_idempotency_key:
+                IDEMPOTENCY[x_idempotency_key] = cid
+            await OUTBOX.put(
+                {
+                    "type": "command.created",
+                    "id": cid,
+                    "device_id": body.device_id,
+                    "name": body.name,
+                    "payload": body.payload,
+                    "created_at": now,
+                }
+            )
         return cmd
+
+
+@app.patch("/commands/{command_id}/ack", status_code=204)
+async def ack_command(command_id: str) -> Response:
+    with tracer.start_as_current_span("ack_command"):
+        if DB_DSN is not None and psycopg is not None:
+            async with await psycopg.AsyncConnection.connect(DB_DSN) as aconn:  # type: ignore
+                async with aconn.cursor() as cur:
+                    await cur.execute(
+                        "update commands set status='acked', acked_at=now() where id=%s",
+                        (command_id,),
+                    )
+                    if cur.rowcount == 0:
+                        raise HTTPException(status_code=404, detail="command not found")
+                    await aconn.commit()
+            return Response(status_code=204)
+        # in-memory fallback
+        cmd = COMMANDS.get(command_id)
+        if not cmd:
+            raise HTTPException(status_code=404, detail="command not found")
+        cmd.status = "acked"
+        return Response(status_code=204)
 
 
 @app.get("/commands", response_model=List[Command])
@@ -118,7 +205,9 @@ async def list_commands():
         if DB_DSN is not None and psycopg is not None:
             async with await psycopg.AsyncConnection.connect(DB_DSN) as aconn:  # type: ignore
                 async with aconn.cursor(row_factory=dict_row) as cur:
-                    await cur.execute("select id, device_id, name, payload, created_at, status from commands order by created_at desc limit 200")
+                    await cur.execute(
+                        "select id, device_id, name, payload, created_at, status from commands order by created_at desc limit 200"
+                    )
                     rows = await cur.fetchall()
                     return rows
         return list(COMMANDS.values())
@@ -130,7 +219,10 @@ async def get_command(command_id: str):
         if DB_DSN is not None and psycopg is not None:
             async with await psycopg.AsyncConnection.connect(DB_DSN) as aconn:  # type: ignore
                 async with aconn.cursor(row_factory=dict_row) as cur:
-                    await cur.execute("select id, device_id, name, payload, created_at, status from commands where id=%s", (command_id,))
+                    await cur.execute(
+                        "select id, device_id, name, payload, created_at, status from commands where id=%s",
+                        (command_id,),
+                    )
                     row = await cur.fetchone()
                     if not row:
                         raise HTTPException(status_code=404, detail="command not found")
@@ -145,8 +237,18 @@ async def get_command(command_id: str):
 async def list_example_commands():
     return {
         "items": [
-            {"id": "cmd-1", "device_id": "dev-001", "name": "reboot", "created_at": "2024-01-01T00:00:00Z"},
-            {"id": "cmd-2", "device_id": "dev-002", "name": "install_update", "created_at": "2024-01-02T00:00:00Z"},
+            {
+                "id": "cmd-1",
+                "device_id": "dev-001",
+                "name": "reboot",
+                "created_at": "2024-01-01T00:00:00Z",
+            },
+            {
+                "id": "cmd-2",
+                "device_id": "dev-002",
+                "name": "install_update",
+                "created_at": "2024-01-02T00:00:00Z",
+            },
         ]
     }
 
@@ -172,21 +274,36 @@ async def _publisher() -> None:
         try:
             if AIOKafkaProducer is not None:
                 loop = asyncio.get_event_loop()
-                producer = AIOKafkaProducer(bootstrap_servers=KAFKA_BOOTSTRAP, loop=loop)
+                producer = AIOKafkaProducer(
+                    bootstrap_servers=KAFKA_BOOTSTRAP, loop=loop
+                )
                 await producer.start()
             while True:
                 # fetch one pending
                 async with await psycopg.AsyncConnection.connect(DB_DSN) as aconn:  # type: ignore
                     async with aconn.cursor(row_factory=dict_row) as cur:
-                        await cur.execute("select id, kind, payload from outbox where sent_at is null order by id asc limit 1 for update skip locked")
+                        await cur.execute(
+                            "select id, kind, aggregate_id, payload from outbox where sent_at is null order by id asc limit 1 for update skip locked"
+                        )
                         row = await cur.fetchone()
                         if not row:
                             await asyncio.sleep(0.5)
                             continue
                         try:
                             if producer is not None:
-                                await producer.send_and_wait(KAFKA_TOPIC, str(row["payload"]).encode("utf-8"))
-                            await cur.execute("update outbox set sent_at = now() where id=%s", (row["id"],))
+                                await producer.send_and_wait(
+                                    KAFKA_TOPIC,
+                                    json.dumps(row["payload"]).encode("utf-8"),
+                                )
+                            await cur.execute(
+                                "update outbox set sent_at = now() where id=%s",
+                                (row["id"],),
+                            )
+                            # optional: update command status to 'sent'
+                            await cur.execute(
+                                "update commands set status='sent' where id=%s",
+                                (row["aggregate_id"],),
+                            )
                             await aconn.commit()
                         except Exception:
                             await aconn.rollback()
@@ -197,8 +314,14 @@ async def _publisher() -> None:
         # In-memory mode
         if AIOKafkaProducer is None:
             while True:
-                await OUTBOX.get()
-                OUTBOX.task_done()
+                evt = await OUTBOX.get()
+                # mark as sent in memory
+                try:
+                    cid = evt.get("id")
+                    if cid in COMMANDS:
+                        COMMANDS[cid].status = "sent"
+                finally:
+                    OUTBOX.task_done()
             return
         producer: Optional[AIOKafkaProducer] = None
         try:
@@ -208,7 +331,13 @@ async def _publisher() -> None:
             while True:
                 event = await OUTBOX.get()
                 try:
-                    await producer.send_and_wait(KAFKA_TOPIC, str(event).encode("utf-8"))
+                    await producer.send_and_wait(
+                        KAFKA_TOPIC, json.dumps(event).encode("utf-8")
+                    )
+                    # update status after publish
+                    cid = event.get("id")
+                    if cid in COMMANDS:
+                        COMMANDS[cid].status = "sent"
                 finally:
                     OUTBOX.task_done()
         finally:
@@ -260,6 +389,10 @@ async def _maybe_init_db() -> None:
                 );
                 """
             )
+            # add acked_at if missing
+            await cur.execute(
+                "alter table commands add column if not exists acked_at timestamptz"
+            )
             await cur.execute(
                 """
                 create table if not exists outbox(
@@ -269,6 +402,15 @@ async def _maybe_init_db() -> None:
                   payload jsonb not null,
                   created_at timestamptz not null default now(),
                   sent_at timestamptz
+                );
+                """
+            )
+            await cur.execute(
+                """
+                create table if not exists idempotency(
+                  key text primary key,
+                  command_id text not null,
+                  created_at timestamptz not null default now()
                 );
                 """
             )
