@@ -118,6 +118,21 @@ services:
       postgres:
         condition: service_healthy
 
+  command-service:
+    build: ./services/command-service
+    container_name: su-command
+    environment:
+      PORT: 8004
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8004"]
+    ports:
+      - "8004:8004"
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
 #  gateway:
 #    image: kong:3.6
 #    # Configure declarative config and DB-less mode in M1
