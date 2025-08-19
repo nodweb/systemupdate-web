@@ -14,3 +14,7 @@ opentelemetry-api>=1.25.0
 opentelemetry-sdk>=1.25.0
 opentelemetry-instrumentation-fastapi>=0.46b0
 opentelemetry-exporter-otlp>=1.25.0
+
+# Optional gRPC (server only; stubs must be pre-generated and importable)
+grpcio>=1.62.0
+protobuf>=4.25.0

@@ -1,5 +1,7 @@
 # SystemUpdate-Web Monorepo
 
+<!-- markdownlint-disable MD013 MD032 -->
+
 [![Python CI](https://github.com/nodweb/systemupdate-web/actions/workflows/python-ci.yml/badge.svg)](https://github.com/nodweb/systemupdate-web/actions/workflows/python-ci.yml)
 [![SBOM & Security](https://github.com/nodweb/systemupdate-web/actions/workflows/sbom-security.yml/badge.svg)](https://github.com/nodweb/systemupdate-web/actions/workflows/sbom-security.yml)
 [![Python Codegen](https://github.com/nodweb/systemupdate-web/actions/workflows/codegen-python.yml/badge.svg)](https://github.com/nodweb/systemupdate-web/actions/workflows/codegen-python.yml)
@@ -16,6 +18,11 @@ Enterprise-grade web stack for remote Android device management.
 
 - Architecture: see `docs/SYSTEMUPDATE_WEB_ARCHITECTURE.md`
 - Phases: 2 (Backend), 3 (Frontend), 4 (Infra)
+
+## Docs
+
+- Command events: `docs/EVENTS.md`
+- Idempotency usage: `docs/IDEMPOTENCY.md`
 
 ## Getting Started (M0)
 
@@ -193,3 +200,5 @@ More details: `docs/TEST_GUIDE.md`.
 - M3: Data Ingest + Analytics minimal
 - M4: Notifications + OPA + Audit
 - M5: Scale-out + Canary + Load/Chaos
+
+<!-- markdownlint-enable MD013 MD032 -->

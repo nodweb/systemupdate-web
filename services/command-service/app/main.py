@@ -3,7 +3,8 @@ import json
 import os
 import uuid
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional, TypedDict, Literal
+from contextlib import asynccontextmanager
 
 import httpx
 from fastapi import FastAPI, Header, HTTPException, Response
@@ -42,7 +43,7 @@ except Exception:
 
 
 @app.get("/healthz")
-async def healthz():
+async def healthz() -> Dict[str, str]:
     return {"status": "ok"}
 
 
@@ -62,13 +63,25 @@ class Command(BaseModel):
 
 
 # naive in-memory store for M0
+Status = Literal["queued", "sent", "acked"]
+
+
+class CommandEvent(TypedDict, total=False):
+    type: str
+    id: str
+    device_id: str
+    name: str
+    payload: Dict[str, Any] | None
+    created_at: str
+
+
 COMMANDS: Dict[str, Command] = {}
-OUTBOX: asyncio.Queue = asyncio.Queue()
+OUTBOX: asyncio.Queue[CommandEvent] = asyncio.Queue()
 # simple in-memory idempotency cache for fallback mode
 IDEMPOTENCY: Dict[str, str] = {}
 KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "kafka:9092")
 KAFKA_TOPIC = os.getenv("COMMAND_EVENTS_TOPIC", "command.events")
-publisher_task: asyncio.Task | None = None
+publisher_task: asyncio.Task[None] | None = None
 DB_DSN: Optional[str] = None  # set when DB is initialized
 
 try:
@@ -87,7 +100,7 @@ except Exception:
 async def create_command(
     body: CommandCreate,
     x_idempotency_key: Optional[str] = Header(default=None, alias="x-idempotency-key"),
-):
+) -> Command | Dict[str, Any]:
     with tracer.start_as_current_span("create_command"):
         cid = f"cmd-{uuid.uuid4().hex[:8]}"
         now = datetime.now(timezone.utc).isoformat()
@@ -200,7 +213,7 @@ async def ack_command(command_id: str) -> Response:
 
 
 @app.get("/commands", response_model=List[Command])
-async def list_commands():
+async def list_commands() -> List[Command] | List[Dict[str, Any]]:
     with tracer.start_as_current_span("list_commands"):
         if DB_DSN is not None and psycopg is not None:
             async with await psycopg.AsyncConnection.connect(DB_DSN) as aconn:  # type: ignore
@@ -214,7 +227,7 @@ async def list_commands():
 
 
 @app.get("/commands/{command_id}", response_model=Command)
-async def get_command(command_id: str):
+async def get_command(command_id: str) -> Command | Dict[str, Any]:
     with tracer.start_as_current_span("get_command"):
         if DB_DSN is not None and psycopg is not None:
             async with await psycopg.AsyncConnection.connect(DB_DSN) as aconn:  # type: ignore
@@ -234,7 +247,7 @@ async def get_command(command_id: str):
 
 
 @app.get("/example/commands")
-async def list_example_commands():
+async def list_example_commands() -> Dict[str, Any]:
     return {
         "items": [
             {
@@ -254,7 +267,7 @@ async def list_example_commands():
 
 
 @app.get("/demo/downstream")
-async def demo_downstream(device_id: str = "dev-001"):
+async def demo_downstream(device_id: str = "dev-001") -> Dict[str, Any]:
     """
     Part of the demo e2e trace: command-service calls device-service.
     """
@@ -345,16 +358,14 @@ async def _publisher() -> None:
                 await producer.stop()
 
 
-@app.on_event("startup")
-async def on_startup() -> None:
+async def _start_background() -> None:
     global publisher_task
     # ensure tables
     await _maybe_init_db()
     publisher_task = asyncio.create_task(_publisher())
 
 
-@app.on_event("shutdown")
-async def on_shutdown() -> None:
+async def _stop_background() -> None:
     global publisher_task
     if publisher_task is not None:
         publisher_task.cancel()
@@ -363,6 +374,27 @@ async def on_shutdown() -> None:
         except asyncio.CancelledError:
             pass
         publisher_task = None
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):  # FastAPI lifespan handler
+    await _start_background()
+    try:
+        yield
+    finally:
+        await _stop_background()
+
+# Activate lifespan on the router
+app.router.lifespan_context = lifespan
+
+
+# Keep named functions for test compatibility (no decorators)
+async def on_startup() -> None:
+    await _start_background()
+
+
+async def on_shutdown() -> None:
+    await _stop_background()
 
 
 async def _maybe_init_db() -> None:

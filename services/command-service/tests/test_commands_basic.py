@@ -1,11 +1,13 @@
 import pytest
-from httpx import AsyncClient
-from services.command-service.app.main import app  # type: ignore
+import httpx
+
+from app.main import app
 
 
 @pytest.mark.asyncio
 async def test_create_list_get_command():
-    async with AsyncClient(app=app, base_url="http://test") as ac:
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
         # create
         resp = await ac.post("/commands", json={
             "device_id": "dev-xyz",

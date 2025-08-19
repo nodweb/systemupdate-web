@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: sample-consumer
+  labels:
+    app: sample-consumer
+spec:
+  selector:
+    app: sample-consumer
+  ports:
+    - name: metrics
+      port: 9000
+      targetPort: metrics
+  type: ClusterIP

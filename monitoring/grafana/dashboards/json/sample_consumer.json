@@ -1,0 +1,17 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "panels": [
+    {"type": "stat", "title": "Received", "targets": [{"expr": "sum(consumer_received_total)"}], "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0}},
+    {"type": "stat", "title": "Validated", "targets": [{"expr": "sum(consumer_validated_total)"}], "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0}},
+    {"type": "stat", "title": "Duplicates", "targets": [{"expr": "sum(consumer_duplicates_total)"}], "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0}},
+    {"type": "stat", "title": "Errors", "targets": [{"expr": "sum(consumer_errors_total)"}], "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0}},
+    {"type": "graph", "title": "Received rate", "targets": [{"expr": "rate(consumer_received_total[1m])"}], "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4}},
+    {"type": "graph", "title": "Duplicates rate", "targets": [{"expr": "rate(consumer_duplicates_total[1m])"}], "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4}},
+    {"type": "heatmap", "title": "Processing latency (hist)", "targets": [{"expr": "sum by (le) (rate(consumer_processing_seconds_bucket[1m]))"}], "gridPos": {"h": 10, "w": 12, "x": 0, "y": 12}},
+    {"type": "graph", "title": "Processing latency (avg)", "targets": [{"expr": "rate(consumer_processing_seconds_sum[1m]) / rate(consumer_processing_seconds_count[1m])"}], "gridPos": {"h": 10, "w": 12, "x": 12, "y": 12}}
+  ],
+  "schemaVersion": 36,
+  "title": "Sample Consumer Metrics",
+  "version": 1
+}

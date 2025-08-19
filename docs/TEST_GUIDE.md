@@ -1,5 +1,7 @@
 # Test Guide (SystemUpdate-Web)
 
+<!-- markdownlint-disable MD013 MD022 MD032 MD031 -->
+
 This guide shows how to run tests for all Python services and how to use the Windows setup script.
 
 For preparing and running full real tests (contract, integration, security) on a VPS, see:
@@ -81,6 +83,13 @@ CI builds/lints via `systemupdate-web/.github/workflows/frontend-ci.yml`.
 
 ## Schemas Validation (Local)
 
+- One-shot helper (Windows PowerShell):
+
+```powershell
+cd systemupdate-web
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/validate-schemas.ps1
+```
+
 - Avro (requires Python and fastavro):
 
 ```bash
@@ -132,6 +141,100 @@ Troubleshooting:
 - Set `DOCKER_AVAILABLE=0` to skip on environments without Docker.
 - First Docker start may take 1–2 minutes; re-run tests after engine is ready.
 
+## Integration Tests: Command Service (DB + Kafka)
+
+Location: `services/command-service/`
+
+This test spins up Postgres and Kafka via Testcontainers, posts a command,
+consumes the `command.created` event from Kafka, and verifies the status
+transition to `sent`.
+
+Prerequisites:
+- Docker Desktop running and healthy
+- Python venv with service requirements installed
+
+Run (Windows PowerShell):
+
+```powershell
+cd services/command-service
+Set-Item Env:PYTHONPATH '.'
+Set-Item Env:DOCKER_AVAILABLE '1'
+pytest -q tests/test_outbox_db_integration.py -q
+```
+
+Notes:
+- If Docker daemon is not reachable, the test will be skipped automatically
+  with a clear message.
+- On Windows, the test sets the proper asyncio policy for psycopg, so no
+  extra action is required.
+
+## Sample Kafka Consumer (JSON Schema validation)
+
+Location: `services/sample-consumer/`
+
+```powershell
+cd services/sample-consumer
+python -m venv .venv
+./.venv/Scripts/pip install -r requirements.txt
+
+# Adjust if Kafka is not localhost, or when running against containers
+$Env:KAFKA_BOOTSTRAP = 'localhost:9092'
+$Env:KAFKA_TOPIC = 'command.events'
+
+./.venv/Scripts/python app/main.py
+```
+
+Notes:
+- Validates messages against `libs/proto-schemas/json/command.created.schema.json`.
+- Commits offsets only after successful processing.
+
+### Producer tool (send duplicates for idempotency testing)
+
+```powershell
+cd systemupdate-web
+python services/sample-consumer/tools/produce_test_events.py --bootstrap localhost:9092 --topic command.events --count 5 --duplicates 2
+```
+
+### Monitoring stack (Prometheus + Grafana)
+
+```powershell
+cd systemupdate-web
+docker compose -f docker-compose.sample-consumer.yml -f docker-compose.monitoring.yml up -d --build
+# Metrics:     http://localhost:9000/metrics
+# Prometheus:  http://localhost:9090
+# Grafana:     http://localhost:3000 (dashboard: "Sample Consumer Metrics")
+```
+
+### Publish and pull the consumer image (GHCR)
+
+CI workflow: `.github/workflows/sample-consumer-publish.yml` builds and pushes tags:
+
+- `ghcr.io/<org-or-user>/sample-consumer:sha-<sha>`
+- `ghcr.io/<org-or-user>/sample-consumer:<branch>`
+- `ghcr.io/<org-or-user>/sample-consumer:latest` (default branch only)
+
+Pull locally:
+
+```powershell
+docker pull ghcr.io/<org-or-user>/sample-consumer:latest
+docker run --rm -e KAFKA_BOOTSTRAP=host.docker.internal:9092 -e KAFKA_TOPIC=command.events -e CONSUMER_GROUP=demo -e METRICS_PORT=9000 -p 9000:9000 ghcr.io/<org-or-user>/sample-consumer:latest
+```
+
+### Kubernetes deployment using published image
+
+Edit `k8s/sample-consumer/deployment.yaml` and set:
+
+```yaml
+        image: ghcr.io/<org-or-user>/sample-consumer:latest
+```
+
+Apply:
+
+```bash
+kubectl apply -f k8s/sample-consumer/deployment.yaml
+kubectl apply -f k8s/sample-consumer/service.yaml
+```
+
 ## Acceptance Checklist (Testing)
 
 - [ ] Per-service minimal tests pass locally (`pytest -q`) with `PYTHONPATH='.'` from the service folder
@@ -141,3 +244,5 @@ Troubleshooting:
 - [ ] VPS test prep completed per `docs/REAL_TESTS_PREP.md` (Docker, Traefik, OIDC)
 - [ ] Contract tests validated (Schemathesis against app or HTTP endpoint)
 - [ ] Docker/Testcontainers-based integration tests pass on VPS
+
+<!-- markdownlint-enable MD013 MD022 MD032 MD031 -->

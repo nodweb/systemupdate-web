@@ -1,0 +1,73 @@
+name: Sample Consumer Integration (Idempotency)
+
+on:
+  push:
+    paths:
+      - 'services/sample-consumer/**'
+      - '.github/workflows/sample-consumer-integration.yml'
+  pull_request:
+    paths:
+      - 'services/sample-consumer/**'
+      - '.github/workflows/sample-consumer-integration.yml'
+
+jobs:
+  integration:
+    runs-on: [self-hosted, docker]
+    timeout-minutes: 25
+    strategy:
+      matrix:
+        backend: [memory, redis, postgres]
+    env:
+      PYTHONUTF8: '1'
+      IDEMP_STORE: ${{ matrix.backend }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Build and start stack (Kafka/Redis/Postgres/Consumer/Prometheus)
+        run: |
+          echo "Using idempotency backend: ${IDEMP_STORE}"
+          export IDEMP_STORE=${IDEMP_STORE}
+          docker compose -f docker-compose.sample-consumer.yml -f docker-compose.monitoring.yml up -d --build
+          echo "Waiting for Kafka and consumer metrics..."
+          timeout 90 bash -c 'until curl -sf http://localhost:9000/metrics > /dev/null; do sleep 3; done'
+
+      - name: Install producer deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install aiokafka
+
+      - name: Produce duplicate events
+        env:
+          KAFKA_BOOTSTRAP: localhost:9092
+          KAFKA_TOPIC: command.events
+        run: |
+          python services/sample-consumer/tools/produce_test_events.py --bootstrap localhost:9092 --topic command.events --count 10 --duplicates 3
+
+      - name: Assert duplicates metric increased
+        run: |
+          sleep 5
+          curl -s http://localhost:9000/metrics | tee metrics.txt
+          python - <<'PY'
+import re, sys
+text = open('metrics.txt','r', encoding='utf-8').read()
+# Find duplicates counter value
+m = re.search(r'^consumer_duplicates_total\s+(\d+)', text, re.M)
+val = int(m.group(1)) if m else 0
+print('duplicates_total=', val)
+sys.exit(0 if val >= 1 else 1)
+PY
+
+      - name: Assert latency histogram present
+        run: |
+          curl -s http://localhost:9000/metrics | tee metrics2.txt
+          grep -E '^(consumer_processing_seconds_bucket|consumer_processing_seconds_count|consumer_processing_seconds_sum)' metrics2.txt
+
+      - name: Teardown
+        if: always()
+        run: |
+          docker compose -f docker-compose.sample-consumer.yml -f docker-compose.monitoring.yml down -v

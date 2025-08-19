@@ -1,0 +1,51 @@
+_format_version: "3.0"
+_transform: true
+
+services:
+  - name: auth-service
+    url: http://auth-service:8001
+    routes:
+      - name: auth-route
+        paths: ["/auth"]
+        strip_path: true
+
+  - name: device-service
+    url: http://device-service:8003
+    routes:
+      - name: device-route
+        paths: ["/devices"]
+        strip_path: false
+
+  - name: command-service
+    url: http://command-service:8004
+    routes:
+      - name: command-route
+        paths: ["/commands"]
+        strip_path: false
+
+  - name: ingest-service
+    url: http://data-ingest-service:8005
+    routes:
+      - name: ingest-http
+        paths: ["/ingest"]
+        strip_path: false
+
+  - name: analytics-service
+    url: http://analytics-service:8006
+    routes:
+      - name: analytics-route
+        paths: ["/analytics"]
+        strip_path: true
+
+  - name: notification-service
+    url: http://notification-service:8007
+    routes:
+      - name: notif-route
+        paths: ["/notify"]
+        strip_path: true
+
+plugins:
+  - name: rate-limiting
+    config:
+      minute: 120
+      policy: local

@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sample-consumer
+  labels:
+    app: sample-consumer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sample-consumer
+  template:
+    metadata:
+      labels:
+        app: sample-consumer
+    spec:
+      containers:
+        - name: sample-consumer
+          image: ghcr.io/your-org/sample-consumer:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: KAFKA_BOOTSTRAP
+              value: "kafka:29092"
+            - name: KAFKA_TOPIC
+              value: "command.events"
+            - name: CONSUMER_GROUP
+              value: "sample-command-consumer"
+            - name: IDEMP_STORE
+              value: "memory"
+            - name: METRICS_PORT
+              value: "9000"
+          ports:
+            - containerPort: 9000
+              name: metrics
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: metrics
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: metrics
+            initialDelaySeconds: 30
+            periodSeconds: 20

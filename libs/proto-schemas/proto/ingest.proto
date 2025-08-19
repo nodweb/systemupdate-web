@@ -1,0 +1,18 @@
+syntax = "proto3";
+package systemupdate.v1;
+
+message IngestRequest {
+  string device_id = 1;
+  string kind = 2;
+  string data_json = 3; // JSON-encoded data
+}
+
+message IngestResponse {
+  bool accepted = 1;
+  bool kafka_sent = 2;
+  string error = 3; // optional error message
+}
+
+service IngestService {
+  rpc Ingest(IngestRequest) returns (IngestResponse);
+}

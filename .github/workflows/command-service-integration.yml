@@ -1,0 +1,41 @@
+name: Command Service Integration (DB+Kafka)
+
+on:
+  push:
+    paths:
+      - 'services/command-service/**'
+      - '.github/workflows/command-service-integration.yml'
+  pull_request:
+    paths:
+      - 'services/command-service/**'
+      - '.github/workflows/command-service-integration.yml'
+
+jobs:
+  integration-tests:
+    # Requires a self-hosted runner with Docker access
+    runs-on: [self-hosted, docker]
+    timeout-minutes: 30
+    env:
+      PYTHONUNBUFFERED: '1'
+      PYTHONUTF8: '1'
+      DOCKER_AVAILABLE: '1'
+      PYTHONPATH: '.'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies (command-service)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r services/command-service/requirements.txt
+          # Ensure test dependencies
+          pip install pytest testcontainers aiokafka fastavro jsonschema
+
+      - name: Run DB+Kafka integration test
+        run: |
+          pytest -q services/command-service/tests/test_outbox_db_integration.py
