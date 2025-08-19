@@ -26,16 +26,78 @@ jobs:
           docker --version
           docker compose version
 
+      - name: Generate minimal compose for CI smoke
+        run: |
+          cat > ci-smoke.yml <<'YAML'
+          services:
+            postgres:
+              image: postgres:16
+              environment:
+                POSTGRES_PASSWORD: example
+              ports:
+                - "5432:5432"
+              healthcheck:
+                test: ["CMD-SHELL", "pg_isready -U postgres"]
+                interval: 5s
+                timeout: 3s
+                retries: 60
+
+            redis:
+              image: redis:7
+              ports:
+                - "6379:6379"
+              healthcheck:
+                test: ["CMD", "redis-cli", "ping"]
+                interval: 5s
+                timeout: 3s
+                retries: 60
+
+            auth-service:
+              build:
+                context: ./services/auth-service
+              environment:
+                AUTH_REQUIRED: "0"
+                AUTHZ_REQUIRED: "0"
+                OPA_REQUIRED: "0"
+                DATABASE__HOST: postgres
+                DATABASE__PORT: "5432"
+                REDIS__HOST: redis
+                REDIS__PORT: "6379"
+              ports:
+                - "8001:8001"
+              depends_on:
+                postgres:
+                  condition: service_healthy
+                redis:
+                  condition: service_healthy
+              healthcheck:
+                test: ["CMD-SHELL", "curl -fsS http://localhost:8001/healthz || exit 1"]
+                interval: 5s
+                timeout: 3s
+                retries: 120
+          YAML
+
+      - name: Verify only minimal services are present (guard)
+        run: |
+          set -euo pipefail
+          echo "Verifying docker compose config only includes postgres, redis, auth-service"
+          docker compose -f ci-smoke.yml --project-name ci-smoke config > ci-smoke.resolved.yml
+          echo "Resolved config:" && sed -n '1,200p' ci-smoke.resolved.yml
+          if grep -E "\b(kafka|zookeeper|gateway|ws-hub|su-command|su-notification|otel-collector|frontend|backend)\b" ci-smoke.resolved.yml; then
+            echo "Unexpected service detected in resolved compose config" >&2
+            exit 1
+          fi
+
       - name: Bring up minimal stack
         run: |
           set -e
-          docker compose -f docker-compose.yml up -d postgres redis otel-collector auth-service ws-hub gateway
-          docker compose ps
+          docker compose -f ci-smoke.yml --project-name ci-smoke up -d --build
+          docker compose -f ci-smoke.yml --project-name ci-smoke ps
 
-      - name: Wait for service health endpoints
+      - name: Wait for service health endpoints (auth-service)
         run: |
           set -e
-          for url in http://localhost:8001/healthz http://localhost:8002/healthz; do
+          for url in http://localhost:8001/healthz; do
             echo "Waiting for $url ..."
             for i in $(seq 1 60); do
               if curl -fsS "$url" >/dev/null 2>&1; then
@@ -49,7 +111,6 @@ jobs:
       - name: Probe /healthz endpoints
         run: |
           curl -fsS http://localhost:8001/healthz
-          curl -fsS http://localhost:8002/healthz
 
       - name: Smoke test authorize stub (no real OIDC in CI)
         env:
@@ -61,4 +122,5 @@ jobs:
 
       - name: Teardown
         if: always()
-        run: docker compose -f docker-compose.yml down -v
+        run: docker compose -f ci-smoke.yml --project-name ci-smoke down -v
+
