@@ -1,10 +1,12 @@
 import os
+
 import pytest
 
 try:
     import docker  # type: ignore
-    from testcontainers.redis import RedisContainer  # type: ignore
     import redis
+    from testcontainers.redis import RedisContainer  # type: ignore
+
     _DOCKER_CLIENT = docker.from_env()
     _DOCKER_AVAILABLE = True
     try:

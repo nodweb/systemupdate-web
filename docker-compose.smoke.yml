@@ -1,0 +1,10 @@
+# Smoke override for running only secure gateway standalone
+services:
+  gateway-secure:
+    # Publish proxy on 80 only
+    ports:
+      - "80:8000"
+    # Remove dependencies so compose can start only this service
+    depends_on: {}
+    environment:
+      KONG_DECLARATIVE_CONFIG: /etc/kong/kong.yml

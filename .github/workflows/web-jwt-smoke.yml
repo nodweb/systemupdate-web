@@ -1,0 +1,64 @@
+﻿name: Web JWT Smoke
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - ".github/workflows/web-jwt-smoke.yml"
+      - "docker-compose.yml"
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - ".github/workflows/web-jwt-smoke.yml"
+      - "docker-compose.yml"
+  workflow_dispatch:
+
+jobs:
+  jwt-smoke:
+    runs-on: ubuntu-latest
+    env:
+      DOCKER_BUILDKIT: 1
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show Docker versions
+        run: |
+          docker --version
+          docker compose version
+
+      - name: Bring up minimal stack
+        run: |
+          set -e
+          docker compose -f docker-compose.yml up -d postgres redis otel-collector auth-service ws-hub gateway
+          docker compose ps
+
+      - name: Wait for service health endpoints
+        run: |
+          set -e
+          for url in http://localhost:8001/healthz http://localhost:8002/healthz; do
+            echo "Waiting for $url ..."
+            for i in $(seq 1 60); do
+              if curl -fsS "$url" >/dev/null 2>&1; then
+                echo "$url is up"
+                break
+              fi
+              sleep 2
+            done
+          done
+
+      - name: Probe /healthz endpoints
+        run: |
+          curl -fsS http://localhost:8001/healthz
+          curl -fsS http://localhost:8002/healthz
+
+      - name: Smoke test authorize stub (no real OIDC in CI)
+        env:
+          TOKEN: ${{ secrets.WS_HUB_SMOKE_TOKEN }}
+        run: |
+          curl -fsS -X POST http://localhost:8001/api/auth/authorize \
+            -H "Content-Type: application/json" \
+            -d "{\"token\":\"${TOKEN:-stub}\",\"action\":\"read\",\"resource\":\"device:123\"}"
+
+      - name: Teardown
+        if: always()
+        run: docker compose -f docker-compose.yml down -v

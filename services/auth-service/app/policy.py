@@ -6,7 +6,10 @@ from typing import Any, Dict, Tuple
 # - else allow if requested action is present in claims['scope'] (space-delimited)
 # - resource is reserved for future attribute checks
 
-def authorize_action(claims: Dict[str, Any], action: str, resource: str) -> Tuple[bool, str | None]:
+
+def authorize_action(
+    claims: Dict[str, Any], action: str, resource: str
+) -> Tuple[bool, str | None]:
     roles = set()
     if "roles" in claims and isinstance(claims["roles"], (list, tuple)):
         roles = set(claims["roles"])  # e.g., ["admin", "operator"]

@@ -1,0 +1,60 @@
+﻿name: Web Compose Validate
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - ".github/workflows/web-compose-validate.yml"
+      - "docker-compose.yml"
+      - "compose.merged.yml"
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - ".github/workflows/web-compose-validate.yml"
+      - "docker-compose.yml"
+      - "compose.merged.yml"
+  workflow_dispatch:
+
+jobs:
+  validate-compose:
+    runs-on: ubuntu-latest
+    env:
+      DOCKER_BUILDKIT: 1
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show Docker versions
+        run: |
+          docker --version
+          docker compose version
+
+      - name: Validate docker-compose.yml
+        run: docker compose -f docker-compose.yml config
+
+      - name: Validate compose.merged.yml (if present)
+        run: |
+          if [ -f compose.merged.yml ]; then
+            docker compose -f compose.merged.yml config
+          else
+            echo "compose.merged.yml not present; skipping"
+          fi
+
+      - name: Fail on absolute Windows paths
+        run: |
+          set -e
+          bad=0
+          for f in docker-compose.yml compose.merged.yml; do
+            [ -f "$f" ] || continue
+            if grep -E "([A-Za-z]:\\\\\\|[A-Za-z]:/)" -n "$f"; then
+              echo "::error file=$f::Found absolute Windows host paths"
+              bad=1
+            fi
+          done
+          exit $bad
+
+      - name: Assert auth-service has healthcheck in base compose
+        run: |
+          if ! awk "/auth-service:/{f=1} f&&/healthcheck:/{print; exit}" docker-compose.yml; then
+            echo "::error ::auth-service missing healthcheck in docker-compose.yml"
+            exit 1
+          fi

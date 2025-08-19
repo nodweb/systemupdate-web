@@ -1,0 +1,410 @@
+name: systemupdate-web
+services:
+  analytics-service:
+    build:
+      context: ./services/analytics-service
+      dockerfile: Dockerfile
+    command:
+      - uvicorn
+      - app.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8006"
+    container_name: su-analytics
+    depends_on:
+      kafka:
+        condition: service_healthy
+        required: true
+      redis:
+        condition: service_healthy
+        required: true
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_SERVICE_NAME: analytics-service
+      OTEL_TRACES_ENABLE: "1"
+      PORT: "8006"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl -fsS http://localhost:8006/healthz >/dev/null || exit 1
+      timeout: 5s
+      interval: 10s
+      retries: 12
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        target: 8006
+        published: "8006"
+        protocol: tcp
+    restart: unless-stopped
+  auth-service:
+    build:
+      context: ./services/auth-service
+      dockerfile: Dockerfile
+    command:
+      - uvicorn
+      - app.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8001"
+    container_name: su-auth
+    depends_on:
+      postgres:
+        condition: service_healthy
+        required: true
+      redis:
+        condition: service_healthy
+        required: true
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_SERVICE_NAME: auth-service
+      OTEL_TRACES_ENABLE: "1"
+      PORT: "8001"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl -fsS http://localhost:8001/healthz >/dev/null || exit 1
+      timeout: 5s
+      interval: 10s
+      retries: 12
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        target: 8001
+        published: "8001"
+        protocol: tcp
+    restart: unless-stopped
+  command-service:
+    build:
+      context: ./services/command-service
+      dockerfile: Dockerfile
+    command:
+      - uvicorn
+      - app.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8004"
+    container_name: su-command
+    depends_on:
+      postgres:
+        condition: service_healthy
+        required: true
+      redis:
+        condition: service_healthy
+        required: true
+    environment:
+      COMMAND_EVENTS_TOPIC: command.events
+      KAFKA_BOOTSTRAP: kafka:9092
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_SERVICE_NAME: command-service
+      OTEL_TRACES_ENABLE: "1"
+      PORT: "8004"
+      POSTGRES_DB: systemupdate
+      POSTGRES_HOST: postgres
+      POSTGRES_PASSWORD: systemupdate
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: systemupdate
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl -fsS http://localhost:8004/healthz >/dev/null || exit 1
+      timeout: 5s
+      interval: 10s
+      retries: 12
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        target: 8004
+        published: "8004"
+        protocol: tcp
+    restart: unless-stopped
+  data-ingest-service:
+    build:
+      context: ./services/data-ingest-service
+      dockerfile: Dockerfile
+    command:
+      - uvicorn
+      - app.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8005"
+    container_name: su-data-ingest
+    depends_on:
+      kafka:
+        condition: service_healthy
+        required: true
+      redis:
+        condition: service_healthy
+        required: true
+    environment:
+      INGEST_TOPIC: device.ingest.raw
+      KAFKA_BOOTSTRAP: kafka:9092
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_SERVICE_NAME: data-ingest-service
+      OTEL_TRACES_ENABLE: "1"
+      PORT: "8005"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl -fsS http://localhost:8005/healthz >/dev/null || exit 1
+      timeout: 5s
+      interval: 10s
+      retries: 12
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        target: 8005
+        published: "8005"
+        protocol: tcp
+    restart: unless-stopped
+  device-service:
+    build:
+      context: ./services/device-service
+      dockerfile: Dockerfile
+    command:
+      - uvicorn
+      - app.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8003"
+    container_name: su-device
+    depends_on:
+      postgres:
+        condition: service_healthy
+        required: true
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_SERVICE_NAME: device-service
+      OTEL_TRACES_ENABLE: "1"
+      PORT: "8003"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl -fsS http://localhost:8003/healthz >/dev/null || exit 1
+      timeout: 5s
+      interval: 10s
+      retries: 12
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        target: 8003
+        published: "8003"
+        protocol: tcp
+    restart: unless-stopped
+  kafka:
+    depends_on:
+      zookeeper:
+        condition: service_started
+        required: true
+    environment:
+      ALLOW_PLAINTEXT_LISTENER: "yes"
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CFG_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENERS: PLAINTEXT://:9092
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1 || exit 1
+      timeout: 5s
+      interval: 10s
+      retries: 12
+    image: bitnami/kafka:3.7
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        target: 9092
+        published: "9092"
+        protocol: tcp
+  notification-service:
+    build:
+      context: ./services/notification-service
+      dockerfile: Dockerfile
+    command:
+      - uvicorn
+      - app.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8007"
+    container_name: su-notification
+    depends_on:
+      otel-collector:
+        condition: service_started
+        required: true
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_SERVICE_NAME: notification-service
+      OTEL_TRACES_ENABLE: "1"
+      PORT: "8007"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl -fsS http://localhost:8007/healthz >/dev/null || exit 1
+      timeout: 5s
+      interval: 10s
+      retries: 12
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        target: 8007
+        published: "8007"
+        protocol: tcp
+    restart: unless-stopped
+  otel-collector:
+    command:
+      - --config
+      - /etc/otel/config.yaml
+    container_name: su-otel-collector
+    image: otel/opentelemetry-collector:0.95.0
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        target: 4317
+        published: "4317"
+        protocol: tcp
+      - mode: ingress
+        target: 4318
+        published: "4318"
+        protocol: tcp
+    volumes:
+      - type: bind
+        source: ./observability/otel-collector-config.yaml
+        target: /etc/otel/config.yaml
+        read_only: true
+        bind:
+          create_host_path: true
+  postgres:
+    container_name: su-postgres
+    environment:
+      POSTGRES_DB: systemupdate
+      POSTGRES_PASSWORD: systemupdate
+      POSTGRES_USER: systemupdate
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB
+      timeout: 3s
+      interval: 5s
+      retries: 20
+    image: postgres:15-alpine
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        target: 5432
+        published: "5432"
+        protocol: tcp
+    volumes:
+      - type: volume
+        source: pgdata
+        target: /var/lib/postgresql/data
+        volume: {}
+  redis:
+    container_name: su-redis
+    healthcheck:
+      test:
+        - CMD
+        - redis-cli
+        - ping
+      timeout: 3s
+      interval: 5s
+      retries: 20
+    image: redis:7-alpine
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        target: 6379
+        published: "6379"
+        protocol: tcp
+  schema-registry:
+    container_name: su-schema-registry
+    depends_on:
+      kafka:
+        condition: service_healthy
+        required: true
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: PLAINTEXT://kafka:9092
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl -fsS http://localhost:8081/subjects >/dev/null || exit 1
+      timeout: 5s
+      interval: 10s
+      retries: 12
+    image: confluentinc/cp-schema-registry:7.6.1
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        target: 8081
+        published: "8081"
+        protocol: tcp
+  ws-hub:
+    build:
+      context: ./services/ws-hub
+      dockerfile: Dockerfile
+    command:
+      - uvicorn
+      - app.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8002"
+    container_name: su-ws-hub
+    depends_on:
+      redis:
+        condition: service_healthy
+        required: true
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_SERVICE_NAME: ws-hub
+      OTEL_TRACES_ENABLE: "1"
+      PORT: "8002"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl -fsS http://localhost:8002/healthz >/dev/null || exit 1
+      timeout: 5s
+      interval: 10s
+      retries: 12
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        target: 8002
+        published: "8002"
+        protocol: tcp
+    restart: unless-stopped
+  zookeeper:
+    environment:
+      ALLOW_ANONYMOUS_LOGIN: "yes"
+    image: bitnami/zookeeper:3.9
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        target: 2181
+        published: "2181"
+        protocol: tcp
+networks:
+  default:
+    name: systemupdate-web_default
+volumes:
+  pgdata:
+    name: systemupdate-web_pgdata

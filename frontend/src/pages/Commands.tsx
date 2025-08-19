@@ -3,47 +3,51 @@ import {
   useGetIngestHealthQuery,
   useGetCommandsQuery,
   useCreateCommandMutation,
-} from '../services/api'
-import { useState } from 'react'
+} from "../services/api";
+import { useState } from "react";
 
 export default function Commands() {
-  const cmd = useGetHealthQuery()
-  const ingest = useGetIngestHealthQuery()
-  const commands = useGetCommandsQuery()
-  const [createCommand, createState] = useCreateCommandMutation()
-  const [deviceId, setDeviceId] = useState('device-123')
-  const [name, setName] = useState('reboot')
-  const [payload, setPayload] = useState('{"reason":"maintenance"}')
+  const cmd = useGetHealthQuery();
+  const ingest = useGetIngestHealthQuery();
+  const commands = useGetCommandsQuery();
+  const [createCommand, createState] = useCreateCommandMutation();
+  const [deviceId, setDeviceId] = useState("device-123");
+  const [name, setName] = useState("reboot");
+  const [payload, setPayload] = useState('{"reason":"maintenance"}');
 
   return (
     <div>
       <h1>Commands</h1>
-      <div style={{ display: 'grid', gap: 8 }}>
+      <div style={{ display: "grid", gap: 8 }}>
         <div>
-          <strong>Command Service:</strong>{' '}
-          {cmd.isLoading ? 'Loading…' : cmd.isError ? 'Error' : cmd.data?.status ?? 'unknown'}
+          <strong>Command Service:</strong>{" "}
+          {cmd.isLoading ? "Loading…" : cmd.isError ? "Error" : cmd.data?.status ?? "unknown"}
         </div>
         <div>
-          <strong>Ingest Service:</strong>{' '}
-          {ingest.isLoading ? 'Loading…' : ingest.isError ? 'Error' : ingest.data?.status ?? 'unknown'}
+          <strong>Ingest Service:</strong>{" "}
+          {ingest.isLoading
+            ? "Loading…"
+            : ingest.isError
+              ? "Error"
+              : ingest.data?.status ?? "unknown"}
         </div>
       </div>
       <hr />
       <h2>Create Command</h2>
       <form
         onSubmit={async (e) => {
-          e.preventDefault()
-          let parsed: Record<string, unknown> | undefined
+          e.preventDefault();
+          let parsed: Record<string, unknown> | undefined;
           try {
-            parsed = payload ? JSON.parse(payload) : undefined
+            parsed = payload ? JSON.parse(payload) : undefined;
           } catch (err) {
-            alert('Payload must be valid JSON')
-            return
+            alert("Payload must be valid JSON");
+            return;
           }
-          await createCommand({ device_id: deviceId, name, payload: parsed })
-          commands.refetch()
+          await createCommand({ device_id: deviceId, name, payload: parsed });
+          commands.refetch();
         }}
-        style={{ display: 'grid', gap: 8, maxWidth: 480 }}
+        style={{ display: "grid", gap: 8, maxWidth: 480 }}
       >
         <label>
           <div>Device ID</div>
@@ -58,10 +62,10 @@ export default function Commands() {
           <textarea rows={4} value={payload} onChange={(e) => setPayload(e.target.value)} />
         </label>
         <button type="submit" disabled={createState.isLoading}>
-          {createState.isLoading ? 'Creating…' : 'Create Command'}
+          {createState.isLoading ? "Creating…" : "Create Command"}
         </button>
-        {createState.isError && <div style={{ color: 'crimson' }}>Error creating command</div>}
-        {createState.isSuccess && <div style={{ color: 'green' }}>Created!</div>}
+        {createState.isError && <div style={{ color: "crimson" }}>Error creating command</div>}
+        {createState.isSuccess && <div style={{ color: "green" }}>Created!</div>}
       </form>
       <hr />
       <h2>Commands</h2>
@@ -69,13 +73,22 @@ export default function Commands() {
       {commands.isError && <div>Error loading commands</div>}
       {commands.data && (
         <ul>
-          {commands.data.map((it: { id: string; device_id: string; name: string; created_at: string; status: string }) => (
-            <li key={it.id}>
-              <code>{it.id}</code> — {it.name} • device <code>{it.device_id}</code> • {it.status} • {new Date(it.created_at).toLocaleString()}
-            </li>
-          ))}
+          {commands.data.map(
+            (it: {
+              id: string;
+              device_id: string;
+              name: string;
+              created_at: string;
+              status: string;
+            }) => (
+              <li key={it.id}>
+                <code>{it.id}</code> — {it.name} • device <code>{it.device_id}</code> • {it.status}{" "}
+                • {new Date(it.created_at).toLocaleString()}
+              </li>
+            )
+          )}
         </ul>
       )}
     </div>
-  )
+  );
 }

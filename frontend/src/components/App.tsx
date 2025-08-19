@@ -1,9 +1,9 @@
-import { Outlet, Link } from 'react-router-dom'
+import { Outlet, Link } from "react-router-dom";
 
 export default function App() {
   return (
-    <div style={{ fontFamily: 'sans-serif', padding: 16 }}>
-      <nav style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
+    <div style={{ fontFamily: "sans-serif", padding: 16 }}>
+      <nav style={{ display: "flex", gap: 12, marginBottom: 16 }}>
         <Link to="/">Dashboard</Link>
         <Link to="/devices">Devices</Link>
         <Link to="/commands">Commands</Link>
@@ -11,5 +11,5 @@ export default function App() {
       </nav>
       <Outlet />
     </div>
-  )
+  );
 }

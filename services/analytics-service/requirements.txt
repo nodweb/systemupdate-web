@@ -11,3 +11,6 @@ opentelemetry-sdk>=1.25.0
 opentelemetry-instrumentation-fastapi>=0.46b0
 opentelemetry-exporter-otlp>=1.25.0
 opentelemetry-instrumentation-httpx>=0.46b0
+
+# Optional streaming consumer
+aiokafka>=0.10.0

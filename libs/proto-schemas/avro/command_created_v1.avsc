@@ -1,0 +1,27 @@
+{
+  "type": "record",
+  "name": "CommandCreated",
+  "namespace": "systemupdate.command",
+  "doc": "Event emitted when a command is created.",
+  "fields": [
+    {
+      "name": "type",
+      "type": "string",
+      "doc": "Event type identifier; expected 'command.created'"
+    },
+    { "name": "id", "type": "string", "doc": "Command identifier" },
+    { "name": "device_id", "type": "string" },
+    { "name": "name", "type": "string" },
+    {
+      "name": "payload",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Optional JSON-encoded payload"
+    },
+    {
+      "name": "created_at",
+      "type": "string",
+      "doc": "RFC3339 timestamp (UTC)"
+    }
+  ]
+}

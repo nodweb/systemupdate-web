@@ -1,11 +1,12 @@
-from fastapi import FastAPI, Depends, HTTPException, status
-from pydantic import BaseModel
 import os
 from typing import Optional
 
+from fastapi import FastAPI, HTTPException, status
+from pydantic import BaseModel
+
 from .otel import init_tracing
-from .security import validate_jwt
 from .policy import authorize_action
+from .security import validate_jwt
 
 app = FastAPI(title="SystemUpdate Auth Service", version="0.1.0")
 
@@ -74,5 +75,7 @@ async def authorize(req: AuthorizeRequest) -> AuthorizeResponse:
 
     allow, reason = authorize_action(claims, req.action, req.resource)
     if not allow:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=reason or "forbidden")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail=reason or "forbidden"
+        )
     return AuthorizeResponse(allow=True, reason=reason)

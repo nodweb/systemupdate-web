@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/systemupdate/command.created.schema.json",
+  "title": "command.created",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["type", "id", "device_id", "name", "created_at"],
+  "properties": {
+    "type": {
+      "const": "command.created",
+      "description": "Event type identifier"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Command identifier (e.g., cmd-<8hex>)"
+    },
+    "device_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "payload": {
+      "type": ["object", "null"],
+      "description": "Arbitrary JSON payload for the command"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "RFC3339 timestamp (UTC)"
+    }
+  }
+}

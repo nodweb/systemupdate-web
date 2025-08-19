@@ -2,14 +2,17 @@ import os
 from typing import Optional
 
 from opentelemetry import trace
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import \
+  OTLPSpanExporter
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
 
-def init_tracing(service_name: str = "analytics-service", app: Optional[object] = None) -> None:
+def init_tracing(
+    service_name: str = "analytics-service", app: Optional[object] = None
+) -> None:
     endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
     enable = os.getenv("OTEL_TRACES_ENABLE") == "1" or bool(endpoint)
     if not enable:
@@ -21,7 +24,9 @@ def init_tracing(service_name: str = "analytics-service", app: Optional[object] 
     trace.set_tracer_provider(provider)
 
     if endpoint:
-        exporter = OTLPSpanExporter(endpoint=endpoint, insecure=endpoint.startswith("http://"))
+        exporter = OTLPSpanExporter(
+            endpoint=endpoint, insecure=endpoint.startswith("http://")
+        )
         provider.add_span_processor(BatchSpanProcessor(exporter))
 
     if app is not None:

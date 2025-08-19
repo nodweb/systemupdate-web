@@ -1,11 +1,13 @@
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Dict
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
+from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
-from .security import validate_token as _sec_validate_token, get_claims as _sec_get_claims
+
 from .policy import allow_ws_connect
+from .security import get_claims as _sec_get_claims
+from .security import validate_token as _sec_validate_token
 
 app = FastAPI(title="SystemUpdate WS Hub", version="0.1.0")
 
@@ -42,7 +44,9 @@ class Connection:
             while self.alive:
                 await asyncio.sleep(HEARTBEAT_INTERVAL_SEC)
                 # send ping
-                await self.ws.send_json({"type": "ping", "ts": datetime.now(timezone.utc).isoformat()})
+                await self.ws.send_json(
+                    {"type": "ping", "ts": datetime.now(timezone.utc).isoformat()}
+                )
         except Exception:
             self.alive = False
 
@@ -69,7 +73,9 @@ def validate_token(token: str) -> bool:
 
 
 @app.websocket("/ws")
-async def websocket_endpoint(ws: WebSocket, token: str = Query(default=""), cid: str = Query(default="")):
+async def websocket_endpoint(
+    ws: WebSocket, token: str = Query(default=""), cid: str = Query(default="")
+):
     # Require token, client id, and policy allow
     claims = _sec_get_claims(token) if token else {}
     if not cid or not claims or not allow_ws_connect(claims, cid):

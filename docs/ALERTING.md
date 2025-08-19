@@ -75,6 +75,19 @@ Restart Prometheus after edits:
 docker compose up -d prometheus
 ```
 
+## SLO Alerts
+- Service-level:
+  - HighErrorRate (>5% over 5m)
+  - ServiceFastBurnRate (5m > 14x budget @ 99.5% SLO)
+  - ServiceSlowBurnRate (1h > 6x budget @ 99.5% SLO)
+- Route-level (excluding /health and /metrics):
+  - RouteLowAvailability/RouteVeryLowAvailability
+  - RouteHighLatencyP95 (>500ms over 5m)
+  - RouteFastBurnRate (5m > 14x budget)
+  - RouteSlowBurnRate (1h > 6x budget)
+
+Dashboard: `observability/grafana/dashboards/SLO-Overview.json` includes Error Budget & Burn Rate panels and thresholds for availability/latency.
+
 ## Frontend Observability (Optional)
 Browser traces can be sent to the Collector over OTLP/HTTP.
 

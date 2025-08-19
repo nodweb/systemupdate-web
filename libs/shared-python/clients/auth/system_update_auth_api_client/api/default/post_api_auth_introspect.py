@@ -6,7 +6,8 @@ import httpx
 from ... import errors
 from ...client import AuthenticatedClient, Client
 from ...models.post_api_auth_introspect_body import PostApiAuthIntrospectBody
-from ...models.post_api_auth_introspect_response_200 import PostApiAuthIntrospectResponse200
+from ...models.post_api_auth_introspect_response_200 import \
+  PostApiAuthIntrospectResponse200
 from ...types import Response
 
 

@@ -1,0 +1,39 @@
+groups:
+  - name: sample-consumer.rules
+    interval: 15s
+    rules:
+      - alert: SampleConsumerDown
+        expr: absent(up{job="sample-consumer"})
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Sample consumer metrics are absent"
+          description: "No metrics scraped from sample-consumer for >1m. Check pod/container health and service." 
+
+      - alert: SampleConsumerHighErrorRate
+        expr: rate(consumer_errors_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Sample consumer error rate high"
+          description: "consumer_errors_total > 0.1/s over 5m. Investigate validation/processing failures."
+
+      - alert: SampleConsumerDuplicateSpike
+        expr: rate(consumer_duplicates_total[5m]) > 0.2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Sample consumer duplicate spike"
+          description: "Duplicate events detected above threshold. Check producer idempotency and keys."
+
+      - alert: SampleConsumerHighLatencyP95
+        expr: histogram_quantile(0.95, sum by (le) (rate(consumer_processing_seconds_bucket[5m]))) > 0.5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Sample consumer processing latency p95 high"
+          description: "p95 processing time > 500ms for 10m. Investigate Kafka lag, DB/Redis latency, or load."

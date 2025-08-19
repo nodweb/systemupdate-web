@@ -1,0 +1,268 @@
+name: Gateway JWT Smoke (Keycloak)
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'docker-compose.yml'
+      - 'gateway/**'
+      - 'auth/keycloak/**'
+      - '.github/workflows/gateway-jwt-smoke.yml'
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create CI override (map proxy to 8081 and admin to 8001; ensure admin enabled)
+        run: |
+          cat > ci.jwt.yml <<'YAML'
+          services:
+            gateway:
+              ports:
+                - "8081:8000"
+                - "8001:8001"
+              environment:
+                KONG_ADMIN_LISTEN: 0.0.0.0:8001, 0.0.0.0:8444 ssl
+              depends_on: {}
+          YAML
+
+      - name: Start Keycloak, core services, and gateway
+        run: |
+          docker compose -f docker-compose.yml -f ci.jwt.yml --profile auth up -d \
+            keycloak postgres redis \
+            command-service device-service analytics-service data-ingest-service notification-service \
+            gateway
+
+      - name: Wait for services
+        run: |
+          for i in {1..60}; do curl -fsS http://localhost:8003/healthz && break || sleep 2; done
+          for i in {1..60}; do curl -fsS http://localhost:8004/healthz && break || sleep 2; done
+          for i in {1..60}; do curl -fsS http://localhost:8005/healthz && break || sleep 2; done
+          for i in {1..60}; do curl -fsS http://localhost:8006/healthz && break || sleep 2; done
+          for i in {1..60}; do curl -fsS http://localhost:8007/healthz && break || sleep 2; done
+          for i in {1..60}; do code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8081); [[ "$code" == "200" || "$code" == "404" ]] && break || sleep 2; done
+          for i in {1..60}; do curl -fsS http://localhost:8080/realms/systemupdate-dev/.well-known/openid-configuration && break || sleep 2; done
+
+      - name: Install jq
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq
+
+      - name: Fetch Keycloak OIDC metadata, JWKS and build PEM
+        run: |
+          disco=$(curl -s http://localhost:8080/realms/systemupdate-dev/.well-known/openid-configuration)
+          iss=$(echo "$disco" | jq -r '.issuer')
+          jwks_uri=$(echo "$disco" | jq -r '.jwks_uri')
+          echo "ISS=$iss" >> $GITHUB_ENV
+          jwks=$(curl -s "$jwks_uri")
+          kid=$(echo "$jwks" | jq -r '.keys[0].kid')
+          x5c=$(echo "$jwks" | jq -r '.keys[0].x5c[0]')
+          echo "-----BEGIN CERTIFICATE-----" > pubkey.pem
+          echo "$x5c" | fold -w 64 >> pubkey.pem
+          echo "-----END CERTIFICATE-----" >> pubkey.pem
+          echo "KID=$kid" >> $GITHUB_ENV
+
+      - name: Configure Kong Consumer + JWT credential (RS256; key=issuer)
+        run: |
+          http_code=$(curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8001/consumers -d 'username=ci-user')
+          echo "Create consumer http_code=$http_code"
+          curl -s -X POST http://localhost:8001/consumers/ci-user/jwt \
+            -F key=$ISS \
+            -F algorithm=RS256 \
+            -F rsa_public_key=@pubkey.pem | jq .
+
+      - name: Create temporary route '/cmd' (strip_path=true) for command-service
+        run: |
+          curl -s -X POST http://localhost:8001/services/command-service/routes \
+            -d name=cmd-route \
+            -d 'paths[]=/cmd' \
+            -d strip_path=true | jq .
+
+      - name: Enable JWT plugin on cmd-route (use iss claim)
+        run: |
+          curl -s -X POST http://localhost:8001/routes/cmd-route/plugins \
+            -d name=jwt \
+            -d config.claims_to_verify=exp \
+            -d config.key_claim_name=iss \
+            -d config.run_on_preflight=false | jq .
+
+      - name: Create temporary route '/dev' (strip_path=true) for device-service
+        run: |
+          curl -s -X POST http://localhost:8001/services/device-service/routes \
+            -d name=dev-route \
+            -d 'paths[]=/dev' \
+            -d strip_path=true | jq .
+
+      - name: Enable JWT plugin on dev-route (use iss claim)
+        run: |
+          curl -s -X POST http://localhost:8001/routes/dev-route/plugins \
+            -d name=jwt \
+            -d config.claims_to_verify=exp \
+            -d config.key_claim_name=iss \
+            -d config.run_on_preflight=false | jq .
+
+      - name: Create temporary route '/an' (strip_path=true) for analytics-service
+        run: |
+          curl -s -X POST http://localhost:8001/services/analytics-service/routes \
+            -d name=an-route \
+            -d 'paths[]=/an' \
+            -d strip_path=true | jq .
+
+      - name: Enable JWT plugin on an-route (use iss claim)
+        run: |
+          curl -s -X POST http://localhost:8001/routes/an-route/plugins \
+            -d name=jwt \
+            -d config.claims_to_verify=exp \
+            -d config.key_claim_name=iss \
+            -d config.run_on_preflight=false | jq .
+
+      - name: Create temporary route '/ing' (strip_path=true) for data-ingest-service
+        run: |
+          curl -s -X POST http://localhost:8001/services/data-ingest-service/routes \
+            -d name=ing-route \
+            -d 'paths[]=/ing' \
+            -d strip_path=true | jq .
+
+      - name: Enable JWT plugin on ing-route (use iss claim)
+        run: |
+          curl -s -X POST http://localhost:8001/routes/ing-route/plugins \
+            -d name=jwt \
+            -d config.claims_to_verify=exp \
+            -d config.key_claim_name=iss \
+            -d config.run_on_preflight=false | jq .
+
+      - name: Create temporary route '/nt' (strip_path=true) for notification-service
+        run: |
+          curl -s -X POST http://localhost:8001/services/notification-service/routes \
+            -d name=nt-route \
+            -d 'paths[]=/nt' \
+            -d strip_path=true | jq .
+
+      - name: Enable JWT plugin on nt-route (use iss claim)
+        run: |
+          curl -s -X POST http://localhost:8001/routes/nt-route/plugins \
+            -d name=jwt \
+            -d config.claims_to_verify=exp \
+            -d config.key_claim_name=iss \
+            -d config.run_on_preflight=false | jq .
+
+      - name: Obtain user access token from Keycloak (password grant)
+        run: |
+          token=$(curl -s -X POST \
+            -d 'client_id=frontend' \
+            -d 'grant_type=password' \
+            -d 'username=devuser' \
+            -d 'password=devpass' \
+            http://localhost:8080/realms/systemupdate-dev/protocol/openid-connect/token | jq -r '.access_token')
+          if [ -z "$token" ] || [ "$token" = "null" ]; then echo "Failed to get token"; exit 1; fi
+          echo "TOKEN=$token" >> $GITHUB_ENV
+
+      - name: Expect 401 without token at /cmd/openapi.json
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8081/cmd/openapi.json)
+          echo "code=$code"; test "$code" = "401"
+
+      - name: Expect 200 with token at /cmd/openapi.json
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $TOKEN" http://localhost:8081/cmd/openapi.json)
+          echo "code=$code"; test "$code" = "200"
+
+      - name: Expect 401 without token at /cmd/healthz
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8081/cmd/healthz)
+          echo "code=$code"; test "$code" = "401"
+
+      - name: Expect 200 with token at /cmd/healthz
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $TOKEN" http://localhost:8081/cmd/healthz)
+          echo "code=$code"; test "$code" = "200"
+
+      - name: Expect 401 without token at /dev/openapi.json
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8081/dev/openapi.json)
+          echo "code=$code"; test "$code" = "401"
+
+      - name: Expect 200 with token at /dev/openapi.json
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $TOKEN" http://localhost:8081/dev/openapi.json)
+          echo "code=$code"; test "$code" = "200"
+
+      - name: Expect 401 without token at /dev/healthz
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8081/dev/healthz)
+          echo "code=$code"; test "$code" = "401"
+
+      - name: Expect 200 with token at /dev/healthz
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $TOKEN" http://localhost:8081/dev/healthz)
+          echo "code=$code"; test "$code" = "200"
+
+      - name: Expect 401 without token at /an/openapi.json
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8081/an/openapi.json)
+          echo "code=$code"; test "$code" = "401"
+
+      - name: Expect 200 with token at /an/openapi.json
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $TOKEN" http://localhost:8081/an/openapi.json)
+          echo "code=$code"; test "$code" = "200"
+
+      - name: Expect 401 without token at /an/healthz
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8081/an/healthz)
+          echo "code=$code"; test "$code" = "401"
+
+      - name: Expect 200 with token at /an/healthz
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $TOKEN" http://localhost:8081/an/healthz)
+          echo "code=$code"; test "$code" = "200"
+
+      - name: Expect 401 without token at /ing/openapi.json
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8081/ing/openapi.json)
+          echo "code=$code"; test "$code" = "401"
+
+      - name: Expect 200 with token at /ing/openapi.json
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $TOKEN" http://localhost:8081/ing/openapi.json)
+          echo "code=$code"; test "$code" = "200"
+
+      - name: Expect 401 without token at /ing/healthz
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8081/ing/healthz)
+          echo "code=$code"; test "$code" = "401"
+
+      - name: Expect 200 with token at /ing/healthz
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $TOKEN" http://localhost:8081/ing/healthz)
+          echo "code=$code"; test "$code" = "200"
+
+      - name: Expect 401 without token at /nt/openapi.json
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8081/nt/openapi.json)
+          echo "code=$code"; test "$code" = "401"
+
+      - name: Expect 200 with token at /nt/openapi.json
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $TOKEN" http://localhost:8081/nt/openapi.json)
+          echo "code=$code"; test "$code" = "200"
+
+      - name: Expect 401 without token at /nt/healthz
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8081/nt/healthz)
+          echo "code=$code"; test "$code" = "401"
+
+      - name: Expect 200 with token at /nt/healthz
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $TOKEN" http://localhost:8081/nt/healthz)
+          echo "code=$code"; test "$code" = "200"
+
+      - name: Teardown
+        if: always()
+        run: docker compose -f docker-compose.yml -f ci.jwt.yml --profile auth down -v

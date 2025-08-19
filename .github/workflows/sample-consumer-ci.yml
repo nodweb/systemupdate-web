@@ -1,0 +1,49 @@
+name: Sample Consumer CI
+
+on:
+  push:
+    paths:
+      - 'services/sample-consumer/**'
+      - '.github/workflows/sample-consumer-ci.yml'
+  pull_request:
+    paths:
+      - 'services/sample-consumer/**'
+      - '.github/workflows/sample-consumer-ci.yml'
+
+jobs:
+  lint-and-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install linters
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff==0.5.7 black==24.4.2 isort==5.13.2
+
+      - name: Install project requirements
+        run: |
+          pip install -r services/sample-consumer/requirements.txt
+
+      - name: Ruff (lint)
+        run: |
+          ruff check services/sample-consumer
+
+      - name: Ruff (format check)
+        run: |
+          ruff format --check services/sample-consumer
+
+      - name: Black (check)
+        run: |
+          black --check services/sample-consumer
+
+      - name: isort (check)
+        run: |
+          isort --check-only services/sample-consumer

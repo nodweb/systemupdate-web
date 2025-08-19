@@ -37,3 +37,15 @@ repos:
     hooks:
       - id: markdownlint-cli2
         files: '.*\.md$'
+
+  - repo: local
+    hooks:
+      - id: schema-validate
+        name: Validate Avro + JSON Schemas
+        entry: python scripts/schema_validate.py
+        language: python
+        additional_dependencies:
+          - fastavro==1.9.7
+          - jsonschema==4.25.0
+        pass_filenames: false
+        stages: [pre-commit]

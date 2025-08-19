@@ -1,0 +1,31 @@
+services:
+  gateway:
+    image: kong:3.6
+    container_name: su-gateway
+    environment:
+      KONG_DATABASE: off
+      KONG_DECLARATIVE_CONFIG: /kong/kong.yml
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_ADMIN_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_ERROR_LOG: /dev/stderr
+      KONG_LOG_LEVEL: info
+      KONG_ADMIN_LISTEN: 0.0.0.0:8001
+    volumes:
+      - ./gateway/kong.yml:/kong/kong.yml:ro
+    ports:
+      - "8000:8000"  # proxy
+      - "8008:8001"  # admin (host 8008)
+    depends_on:
+      auth-service:
+        condition: service_started
+      device-service:
+        condition: service_started
+      command-service:
+        condition: service_started
+      data-ingest-service:
+        condition: service_started
+      analytics-service:
+        condition: service_started
+      notification-service:
+        condition: service_started
