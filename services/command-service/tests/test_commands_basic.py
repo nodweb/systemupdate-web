@@ -1,6 +1,5 @@
-import pytest
 import httpx
-
+import pytest
 from app.main import app
 
 
@@ -9,11 +8,10 @@ async def test_create_list_get_command():
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
         # create
-        resp = await ac.post("/commands", json={
-            "device_id": "dev-xyz",
-            "name": "reboot",
-            "payload": {"force": True}
-        })
+        resp = await ac.post(
+            "/commands",
+            json={"device_id": "dev-xyz", "name": "reboot", "payload": {"force": True}},
+        )
         assert resp.status_code == 201
         created = resp.json()
         cid = created["id"]

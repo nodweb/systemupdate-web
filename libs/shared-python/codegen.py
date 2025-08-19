@@ -4,7 +4,9 @@ Generate Python API clients from OpenAPI specs under libs/proto-schemas/openapi/
 Requires: pip install -r libs/shared-python/requirements.txt
 Output: libs/shared-python/clients/<service-name>/
 """
+
 from __future__ import annotations
+
 import subprocess
 import sys
 from pathlib import Path

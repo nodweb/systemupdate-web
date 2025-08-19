@@ -15,7 +15,7 @@ services:
       - ./gateway/kong.yml:/kong/kong.yml:ro
     ports:
       - "8000:8000"  # proxy
-      - "8001:8001"  # admin
+      - "8008:8001"  # admin (host 8008)
     depends_on:
       auth-service:
         condition: service_started

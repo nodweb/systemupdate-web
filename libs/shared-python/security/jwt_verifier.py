@@ -73,22 +73,34 @@ _bearer = HTTPBearer(auto_error=False)
 
 
 def require_auth(scopes: Optional[list[str]] = None):
-    async def _dep(creds: HTTPAuthorizationCredentials = Depends(_bearer)) -> Dict[str, Any]:
+    async def _dep(
+        creds: HTTPAuthorizationCredentials = Depends(_bearer),
+    ) -> Dict[str, Any]:
         if creds is None:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="missing bearer token")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="missing bearer token"
+            )
         try:
             claims = validate_jwt(creds.credentials)
         except Exception:
             # Dev fallback if explicitly enabled
             if os.getenv("AUTH_DEV_ALLOW_ANY", "false").lower() in {"1", "true", "yes"}:
-                return {"sub": "dev-user", "scope": os.getenv("AUTH_DEV_SCOPE", "")}  # minimal claims
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid token")
+                return {
+                    "sub": "dev-user",
+                    "scope": os.getenv("AUTH_DEV_SCOPE", ""),
+                }  # minimal claims
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid token"
+            )
 
         if scopes:
             scope_set = set((claims.get("scope") or "").split())
             for s in scopes:
                 if s not in scope_set:
-                    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"missing scope: {s}")
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail=f"missing scope: {s}",
+                    )
         return claims
 
     return _dep

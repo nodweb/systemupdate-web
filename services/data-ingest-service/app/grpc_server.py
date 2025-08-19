@@ -1,8 +1,5 @@
-import asyncio
-import json
 import logging
 import os
-from typing import Optional
 
 try:
     import grpc
@@ -14,7 +11,11 @@ except Exception:  # pragma: no cover
 LOGGER = logging.getLogger(__name__)
 
 # We expect generated modules to be available on PYTHONPATH when enabled
-INGEST_ENABLED = os.getenv("GRPC_INGEST_ENABLED", "false").lower() in {"1", "true", "yes"}
+INGEST_ENABLED = os.getenv("GRPC_INGEST_ENABLED", "false").lower() in {
+    "1",
+    "true",
+    "yes",
+}
 INGEST_BIND = os.getenv("GRPC_INGEST_BIND", "0.0.0.0:50051")
 
 
@@ -49,9 +50,16 @@ async def serve(handler_send):
             kind = request.kind
             data_json = request.data_json
             accepted, kafka_sent, error = await handler_send(device_id, kind, data_json)
-            return pb2.IngestResponse(accepted=accepted, kafka_sent=kafka_sent, error=error or "")
+            return pb2.IngestResponse(
+                accepted=accepted, kafka_sent=kafka_sent, error=error or ""
+            )
 
-    s = aio_server(options=[("grpc.max_send_message_length", -1), ("grpc.max_receive_message_length", -1)])
+    s = aio_server(
+        options=[
+            ("grpc.max_send_message_length", -1),
+            ("grpc.max_receive_message_length", -1),
+        ]
+    )
     pb2_grpc.add_IngestServiceServicer_to_server(IngestService(), s)  # type: ignore
     s.add_insecure_port(INGEST_BIND)
     LOGGER.info("Starting gRPC ingest server on %s", INGEST_BIND)

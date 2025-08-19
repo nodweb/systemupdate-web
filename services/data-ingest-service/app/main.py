@@ -4,7 +4,8 @@ import os
 from typing import Any, Dict, List, Optional
 
 import httpx
-from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import (FastAPI, HTTPException, Request, WebSocket,
+                     WebSocketDisconnect)
 from pydantic import BaseModel, Field, ValidationError
 
 try:
@@ -41,7 +42,9 @@ bootstrap = os.getenv("KAFKA_BOOTSTRAP", "kafka:9092")
 
 # Validation controls
 ALLOWED_KINDS: Optional[List[str]] = (
-    os.getenv("INGEST_ALLOWED_KINDS").split(",") if os.getenv("INGEST_ALLOWED_KINDS") else None
+    os.getenv("INGEST_ALLOWED_KINDS").split(",")
+    if os.getenv("INGEST_ALLOWED_KINDS")
+    else None
 )
 MAX_BYTES: int = int(os.getenv("INGEST_MAX_BYTES", "524288"))  # 512 KiB default
 
@@ -134,7 +137,9 @@ async def ws_ingest(ws: WebSocket):
         await _check_auth(dict(ws.headers))
     except HTTPException as he:
         await ws.accept()
-        await ws.send_json({"accepted": False, "error": "unauthorized", "detail": he.detail})
+        await ws.send_json(
+            {"accepted": False, "error": "unauthorized", "detail": he.detail}
+        )
         await ws.close(code=1008)
         return
     await ws.accept()
@@ -148,10 +153,16 @@ async def ws_ingest(ws: WebSocket):
                 if ALLOWED_KINDS is not None and model.kind not in ALLOWED_KINDS:
                     await ws.send_json({"accepted": False, "error": "kind not allowed"})
                     continue
-                payload = {"device_id": model.device_id, "kind": model.kind, "data": model.data}
+                payload = {
+                    "device_id": model.device_id,
+                    "kind": model.kind,
+                    "data": model.data,
+                }
                 encoded = json.dumps(payload, separators=(",", ":")).encode("utf-8")
                 if len(encoded) > MAX_BYTES:
-                    await ws.send_json({"accepted": False, "error": "payload too large"})
+                    await ws.send_json(
+                        {"accepted": False, "error": "payload too large"}
+                    )
                     continue
                 sent = False
                 if producer is not None:
@@ -162,7 +173,9 @@ async def ws_ingest(ws: WebSocket):
                         sent = False
                 await ws.send_json({"accepted": True, "kafka_sent": sent})
             except ValidationError as ve:
-                await ws.send_json({"accepted": False, "error": "validation", "details": ve.errors()})
+                await ws.send_json(
+                    {"accepted": False, "error": "validation", "details": ve.errors()}
+                )
             except Exception:
                 await ws.send_json({"accepted": False, "error": "invalid json"})
     except WebSocketDisconnect:
@@ -202,7 +215,7 @@ async def _grpc_handler_send(device_id: str, kind: str, data_json: str):
 async def _maybe_start_grpc():
     # Defer import to runtime
     try:
-        from .grpc_server import serve, INGEST_ENABLED  # type: ignore
+        from .grpc_server import INGEST_ENABLED, serve  # type: ignore
 
         if INGEST_ENABLED:
             task = asyncio.create_task(serve(_grpc_handler_send))

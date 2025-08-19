@@ -1,11 +1,13 @@
-import os
 import asyncio
+import os
+
 import pytest
 
 try:
     import docker  # type: ignore
+    from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
     from testcontainers.kafka import KafkaContainer  # type: ignore
-    from aiokafka import AIOKafkaProducer, AIOKafkaConsumer
+
     _DOCKER_CLIENT = docker.from_env()
     _DOCKER_AVAILABLE = True
     try:

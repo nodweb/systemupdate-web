@@ -1,11 +1,9 @@
-import json
 import os
 import time
 from typing import Any, Dict, Optional
 
 import httpx
 from jose import jwt
-from jose.utils import base64url_decode
 
 JWKS_CACHE: Dict[str, Any] = {"keys": None, "fetched_at": 0}
 JWKS_TTL_SECONDS = int(os.getenv("OIDC_JWKS_TTL", "300"))

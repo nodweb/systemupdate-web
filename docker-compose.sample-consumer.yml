@@ -46,7 +46,7 @@ services:
       KAFKA_BOOTSTRAP: kafka:29092
       KAFKA_TOPIC: command.events
       CONSUMER_GROUP: sample-command-consumer
-      IDEMP_STORE: memory # change to 'redis' or 'postgres' to enable external stores
+      IDEMP_STORE: ${IDEMP_STORE:-memory} # set to 'redis' or 'postgres' to enable external stores
       REDIS_URL: redis://redis:6379/0
       POSTGRES_DSN: postgresql://user:password@postgres:5432/sample
       METRICS_PORT: "9000"

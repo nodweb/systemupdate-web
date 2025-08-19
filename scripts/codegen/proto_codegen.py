@@ -13,7 +13,6 @@ Outputs:
   - generated/python
 """
 
-import os
 import shutil
 import subprocess
 import sys
@@ -48,24 +47,30 @@ def main():
         print("WARNING: protoc not found on PATH. Skipping Python codegen.")
     else:
         for proto in PROTO_DIR.rglob("*.proto"):
-            run([
-                "protoc",
-                f"--proto_path={PROTO_DIR}",
-                f"--python_out={OUT_PY}",
-                str(proto),
-            ], cwd=str(WEB_ROOT))
+            run(
+                [
+                    "protoc",
+                    f"--proto_path={PROTO_DIR}",
+                    f"--python_out={OUT_PY}",
+                    str(proto),
+                ],
+                cwd=str(WEB_ROOT),
+            )
 
     # Generate TypeScript via ts-proto
     if not which("protoc") or not which("protoc-gen-ts_proto"):
         print("WARNING: protoc and/or ts-proto plugin not found. Skipping TS codegen.")
     else:
         for proto in PROTO_DIR.rglob("*.proto"):
-            run([
-                "protoc",
-                f"--proto_path={PROTO_DIR}",
-                f"--ts_proto_out={OUT_TS}",
-                str(proto),
-            ], cwd=str(WEB_ROOT))
+            run(
+                [
+                    "protoc",
+                    f"--proto_path={PROTO_DIR}",
+                    f"--ts_proto_out={OUT_TS}",
+                    str(proto),
+                ],
+                cwd=str(WEB_ROOT),
+            )
 
     print("Done. Outputs in:")
     print(" -", OUT_TS)

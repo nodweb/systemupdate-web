@@ -1,0 +1,170 @@
+name: E2E (Playwright)
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'docker-compose.yml'
+      - 'gateway/**'
+      - 'services/**'
+      - 'tests/e2e/**'
+      - '.github/workflows/e2e-playwright.yml'
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Playwright deps
+        working-directory: tests/e2e
+        run: |
+          npm ci || npm install
+          npx playwright install --with-deps chromium
+
+      - name: Start stack
+        env:
+          COMPOSE_PROFILES: dev
+        run: |
+          docker compose up -d
+          # Wait for gateway and core services
+          for i in {1..60}; do curl -fsS http://localhost:8000/devices/healthz && break || sleep 2; done
+          for i in {1..60}; do curl -fsS http://localhost:8000/commands/healthz && break || sleep 2; done
+
+      - name: Run Playwright
+        working-directory: tests/e2e
+        env:
+          BASE_URL: http://localhost:8000
+        run: |
+          npx playwright test --reporter=list
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: tests/e2e/playwright-report
+
+  e2e-opa-deny:
+    name: E2E (OPA deny)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Playwright deps
+        working-directory: tests/e2e
+        run: |
+          npm ci || npm install
+          npx playwright install --with-deps chromium
+
+      - name: Start stack with OPA profile
+        env:
+          COMPOSE_PROFILES: policy
+        run: |
+          docker compose up -d opa
+          docker compose up -d
+          # Wait for services behind gateway
+          for i in {1..60}; do curl -fsS http://localhost:8000/devices/healthz && break || sleep 2; done
+          for i in {1..60}; do curl -fsS http://localhost:8000/commands/healthz && break || sleep 2; done
+
+      - name: Run Playwright (OPA deny)
+        working-directory: tests/e2e
+        env:
+          BASE_URL: http://localhost:8000
+          OPA_E2E: '1'
+          AUTHZ_REQUIRED: '1'
+          OPA_REQUIRED: '1'
+          OPA_URL: http://localhost:8181/v1/data/systemupdate/allow
+        run: |
+          npx playwright test tests/opa-deny.spec.ts --reporter=list
+
+      - name: Upload Playwright report (OPA)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-opa
+          path: tests/e2e/playwright-report
+
+  e2e-prod-secure:
+    name: E2E (prod override, secure gateway)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Playwright deps
+        working-directory: tests/e2e
+        run: |
+          npm ci || npm install
+          npx playwright install --with-deps chromium
+
+      - name: Start prod-like stack (secure gateway on :80)
+        env:
+          COMPOSE_PROFILES: secure
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+          # Wait for gateway and core services via port 80
+          for i in {1..60}; do curl -fsS http://localhost/devices/healthz && break || sleep 2; done
+          for i in {1..60}; do curl -fsS http://localhost/commands/healthz && break || sleep 2; done
+
+      - name: Run Playwright (prod-secure)
+        working-directory: tests/e2e
+        env:
+          BASE_URL: http://localhost
+        run: |
+          npx playwright test --reporter=list
+
+      - name: Upload Playwright report (prod-secure)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-prod-secure
+          path: tests/e2e/playwright-report
+
+  prod-security-smoke:
+    name: Prod security smoke (headers, admin closed)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Start prod-like stack (secure gateway only)
+        env:
+          COMPOSE_PROFILES: secure
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d gateway-secure
+          for i in {1..60}; do curl -fsS http://localhost/devices/healthz && break || sleep 2; done
+
+      - name: Check CORS headers on devices route
+        run: |
+          curl -i -s http://localhost/devices/healthz | tee /tmp/resp.txt
+          grep -i "access-control-allow-origin" /tmp/resp.txt || (echo "Missing CORS header" && exit 1)
+
+      - name: Verify Kong admin port is not exposed
+        run: |
+          if curl -fsS http://localhost:8001/status; then
+            echo "Admin port should not be exposed in prod override" && exit 1
+          else
+            echo "Admin port correctly not exposed"
+          fi

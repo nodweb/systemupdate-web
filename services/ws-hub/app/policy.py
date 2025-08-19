@@ -1,4 +1,4 @@
-from typing import Dict, Any
+from typing import Any, Dict
 
 # Minimal policy scaffolding for ws-hub.
 # Later this can be replaced by a real OPA/OPAL integration or Rego evaluation.

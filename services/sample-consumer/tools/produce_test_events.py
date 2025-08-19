@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import uuid
+
 from aiokafka import AIOKafkaProducer
 
 KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "localhost:9092")

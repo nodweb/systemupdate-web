@@ -35,6 +35,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/setup-dev.ps
   - `ws-hub`
   - `auth-service`
   - `device-service`
+  - `command-service`
+  - `analytics-service`
+  - `notification-service`
 
 Examples:
 ```powershell
@@ -70,6 +73,27 @@ Then re-run the script with `-SkipUbuntuInstall`.
 
 ## Next steps
 - See `docs/TEST_GUIDE.md` for running tests, environment toggles (e.g., `DOCKER_AVAILABLE`), and common issues.
+- See `docs/AUTH_GUIDE.md` for enabling JWT auth, authorization, and OPA policy checks.
+
+### Security toggles (quick reference)
+You can enable or disable authentication/authorization and OPA evaluation via environment variables before starting a service or running tests. See `docs/AUTH_GUIDE.md` for full details.
+
+```powershell
+# Enable JWT verification and auth-service authorization
+$Env:AUTH_REQUIRED = '1'
+$Env:AUTHZ_REQUIRED = '1'
+$Env:AUTH_INTROSPECT_URL = 'http://localhost:8001/auth/introspect'
+$Env:AUTH_AUTHORIZE_URL  = 'http://localhost:8001/auth/authorize'
+
+# Optional: enable OPA enforcement (fail-closed on deny/error)
+$Env:OPA_REQUIRED = '1'
+$Env:OPA_URL = 'http://localhost:8181/v1/data/systemupdate/allow'
+$Env:OPA_TIMEOUT = '2.0'
+
+# Developer bypass for local-only scenarios (use cautiously)
+$Env:AUTH_DEV_ALLOW_ANY = '1'   # accepts any bearer token and injects dev claims
+$Env:AUTH_DEV_SCOPE = 'read write admin'
+```
 
 ## Generate trace load (optional)
 To visualize distributed tracing and the latency/error dashboards, you can generate sample traffic with the PowerShell script:

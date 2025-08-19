@@ -40,6 +40,7 @@ services:
   prometheus:
     image: prom/prometheus:v2.53.0
     container_name: su-prometheus
+    profiles: ["dev"]
     volumes:
       - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./observability/alerts.rules.yml:/etc/prometheus/alerts.rules.yml:ro
@@ -53,6 +54,7 @@ services:
   grafana:
     image: grafana/grafana:11.1.0
     container_name: su-grafana
+    profiles: ["dev"]
     environment:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: admin
@@ -73,6 +75,7 @@ services:
   alertmanager:
     image: prom/alertmanager:v0.27.0
     container_name: su-alertmanager
+    profiles: ["dev"]
     command: ["--config.file=/etc/alertmanager/alertmanager.yml"]
     ports:
       - "9093:9093"
@@ -82,6 +85,7 @@ services:
   blackbox-exporter:
     image: prom/blackbox-exporter:v0.25.0
     container_name: su-blackbox
+    profiles: ["dev"]
     ports:
       - "9115:9115"
 
@@ -123,6 +127,7 @@ services:
 
   minio:
     image: minio/minio:latest
+    profiles: ["dev"]
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: minioadmin
@@ -150,11 +155,13 @@ services:
     ports:
       - "8001:8001"
     restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8001/healthz >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  
 
   notification-service:
     build: ./services/notification-service
@@ -168,6 +175,11 @@ services:
     ports:
       - "8007:8007"
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8007/healthz >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
     depends_on:
       otel-collector:
         condition: service_started
@@ -184,6 +196,11 @@ services:
     ports:
       - "8002:8002"
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8002/healthz >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
     depends_on:
       redis:
         condition: service_healthy
@@ -200,6 +217,11 @@ services:
     ports:
       - "8003:8003"
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8003/healthz >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
     depends_on:
       postgres:
         condition: service_healthy
@@ -223,6 +245,11 @@ services:
     ports:
       - "8004:8004"
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8004/healthz >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
     depends_on:
       postgres:
         condition: service_healthy
@@ -243,6 +270,11 @@ services:
     ports:
       - "8005:8005"
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8005/healthz >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
     depends_on:
       redis:
         condition: service_healthy
@@ -261,15 +293,156 @@ services:
     ports:
       - "8006:8006"
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8006/healthz >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
     depends_on:
       redis:
         condition: service_healthy
       kafka:
         condition: service_healthy
 
-#  gateway:
-#    image: kong:3.6
-#    # Configure declarative config and DB-less mode in M1
+  gateway:
+    image: kong:3.6
+    container_name: su-gateway
+    profiles: ["dev"]
+    environment:
+      KONG_DATABASE: off
+      KONG_DECLARATIVE_CONFIG: /etc/kong/kong.yml
+      KONG_LOG_LEVEL: info
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_ADMIN_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_LISTEN: 0.0.0.0:8001
+      KONG_PROXY_LISTEN: 0.0.0.0:8000
+      # CORS plugin can be enabled per-route later; leave global defaults minimal
+    ports:
+      - "8000:8000"  # proxy
+      - "8001:8001"  # admin api
+    volumes:
+      - ./gateway/kong.yml:/etc/kong/kong.yml:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8001/status >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    depends_on:
+      auth-service:
+        condition: service_healthy
+      device-service:
+        condition: service_healthy
+      command-service:
+        condition: service_healthy
+      analytics-service:
+        condition: service_healthy
+      notification-service:
+        condition: service_healthy
+      ws-hub:
+        condition: service_healthy
+
+  # Secure gateway profile (tight CORS, per-route plugins)
+  gateway-secure:
+    image: kong:3.6
+    container_name: su-gateway-secure
+    profiles: ["secure"]
+    environment:
+      KONG_DATABASE: off
+      KONG_DECLARATIVE_CONFIG: /etc/kong/kong.yml
+      KONG_LOG_LEVEL: info
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_ADMIN_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_LISTEN: off
+      KONG_PROXY_LISTEN: 0.0.0.0:8000
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./gateway/kong.prod.yml:/etc/kong/kong.yml:ro
+    healthcheck:
+      test: ["CMD-SHELL", "(curl -s -o /dev/null -w '%{http_code}' http://localhost:8000 || echo 000) | grep -E '200|404' >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    depends_on:
+      auth-service:
+        condition: service_healthy
+      device-service:
+        condition: service_healthy
+      command-service:
+        condition: service_healthy
+      analytics-service:
+        condition: service_healthy
+      notification-service:
+        condition: service_healthy
+      ws-hub:
+        condition: service_healthy
+
+  # Optional: Keycloak for OIDC dev profile (enable with: docker compose --profile auth up -d keycloak)
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    container_name: su-keycloak
+    profiles: ["auth"]
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./auth/keycloak:/opt/keycloak/data/import:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/realms/master/.well-known/openid-configuration >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  # Optional: OPA for policy decisions and decision logs (enable with: docker compose --profile policy up -d opa)
+  opa:
+    image: openpolicyagent/opa:latest
+    container_name: su-opa
+    profiles: ["policy"]
+    command: ["run", "--server", "--addr=0.0.0.0:8181", "--set=decision_logs.console=true", "/policy"]
+    ports:
+      - "8181:8181"
+    volumes:
+      - ./auth/opa:/policy:ro
+
+  # Optional: OPAL server and client for policy bundle sync (demo)
+  opal-server:
+    image: permitio/opal-server:latest
+    container_name: su-opal-server
+    profiles: ["policy"]
+    environment:
+      OPAL_LOG_LEVEL: INFO
+      # Configure Git policy repo (change these to your own repo/branch)
+      OPAL_POLICY_REPO_URL: ${OPAL_POLICY_REPO_URL:-https://github.com/nodweb/systemupdate-policies.git}
+      OPAL_POLICY_REPO_BRANCH: ${OPAL_POLICY_REPO_BRANCH:-main}
+      OPAL_POLICY_REPO_POLLING_INTERVAL: ${OPAL_POLICY_REPO_POLLING_INTERVAL:-30}
+      # Optional: path within repo for policies/bundles
+      OPAL_POLICY_REPO_PATH: ${OPAL_POLICY_REPO_PATH:-/}
+    ports:
+      - "7002:7002"
+    depends_on:
+      opa:
+        condition: service_started
+
+  opal-client:
+    image: permitio/opal-client:latest
+    container_name: su-opal-client
+    profiles: ["policy"]
+    environment:
+      OPAL_LOG_LEVEL: INFO
+      OPAL_CLIENT_POLICY_STORE_URL: http://opa:8181
+      OPAL_CLIENT_SERVER_URL: http://opal-server:7002
+    depends_on:
+      opa:
+        condition: service_started
+      opal-server:
+        condition: service_started
 
   otel-collector:
     image: otel/opentelemetry-collector:0.95.0
@@ -284,6 +457,7 @@ services:
   tempo:
     image: grafana/tempo:2.6.0
     container_name: su-tempo
+    profiles: ["dev"]
     volumes:
       - ./observability/tempo.yaml:/etc/tempo/tempo.yaml:ro
     command: ["-config.file=/etc/tempo/tempo.yaml"]

@@ -1,8 +1,9 @@
+import asyncio
 import os
+import sys
+
 # CI trigger: harmless comment to exercise self-hosted DB+Kafka workflow
 import pytest
-import sys
-import asyncio
 
 # Skip this integration test when Docker is unavailable in the environment
 skip_reason = "Skipping DB/Kafka integration test: DOCKER_AVAILABLE=0"
@@ -30,13 +31,15 @@ async def test_outbox_db_integration_end_to_end(monkeypatch):
         pytest.skip(f"Docker daemon unavailable: {e}")
 
     # Import testcontainers lazily to avoid import errors when skipped
-    from testcontainers.postgres import PostgresContainer
-    from testcontainers.kafka import KafkaContainer
     import httpx
     from aiokafka import AIOKafkaConsumer
+    from testcontainers.kafka import KafkaContainer
+    from testcontainers.postgres import PostgresContainer
 
     # Start Postgres and Kafka
-    with PostgresContainer("postgres:15") as pg, KafkaContainer("confluentinc/cp-kafka:7.5.0") as kfk:
+    with PostgresContainer("postgres:15") as pg, KafkaContainer(
+        "confluentinc/cp-kafka:7.5.0"
+    ) as kfk:
         pg.start()
         kfk.start()
 
@@ -44,9 +47,8 @@ async def test_outbox_db_integration_end_to_end(monkeypatch):
         jdbc = pg.get_connection_url()
         # jdbc like postgresql+psycopg://test:test@0.0.0.0:5432/test
         # Convert to psycopg URL
-        psy_url = (
-            jdbc.replace("postgresql+psycopg://", "postgresql://")
-            .replace("postgresql+psycopg2://", "postgresql://")
+        psy_url = jdbc.replace("postgresql+psycopg://", "postgresql://").replace(
+            "postgresql+psycopg2://", "postgresql://"
         )
         bootstrap = kfk.get_bootstrap_server()
 
@@ -54,14 +56,20 @@ async def test_outbox_db_integration_end_to_end(monkeypatch):
         monkeypatch.setenv("KAFKA_BOOTSTRAP", bootstrap)
 
         # Import app after env set
-        from app.main import app, on_startup, on_shutdown
+        from app.main import app, on_shutdown, on_startup
 
         # Start app background tasks
         await on_startup()
         try:
             transport = httpx.ASGITransport(app=app)
-            async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
-                payload = {"device_id": "dev-db", "name": "install_update", "payload": {"version": "1.2.3"}}
+            async with httpx.AsyncClient(
+                transport=transport, base_url="http://test"
+            ) as ac:
+                payload = {
+                    "device_id": "dev-db",
+                    "name": "install_update",
+                    "payload": {"version": "1.2.3"},
+                }
                 r = await ac.post("/commands", json=payload)
                 assert r.status_code == 201
                 cid = r.json()["id"]
@@ -87,7 +95,10 @@ async def test_outbox_db_integration_end_to_end(monkeypatch):
                                 import json
 
                                 evt = json.loads(m.value.decode("utf-8"))
-                                if evt.get("id") == cid and evt.get("type") == "command.created":
+                                if (
+                                    evt.get("id") == cid
+                                    and evt.get("type") == "command.created"
+                                ):
                                     matched = True
                                     break
                             if matched:

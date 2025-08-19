@@ -1,7 +1,7 @@
-import json
-from fastapi.testclient import TestClient
 import importlib.util
 from pathlib import Path
+
+from fastapi.testclient import TestClient
 
 # Dynamically load app.main because the package directory has a hyphen
 APP_MAIN = Path(__file__).resolve().parents[1] / "app" / "main.py"

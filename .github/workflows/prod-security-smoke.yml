@@ -1,0 +1,58 @@
+name: prod-security-smoke
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Create CI compose override for gateway on 8080
+        run: |
+          cat > ci.smoke.yml <<'YAML'
+          services:
+            gateway-secure:
+              ports:
+                - "8080:8000"
+              environment:
+                KONG_ADMIN_LISTEN: off
+              depends_on: {}
+          YAML
+
+      - name: Start secure gateway only
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.prod.yml -f ci.smoke.yml up -d --no-deps gateway-secure
+
+      - name: Wait for gateway to be ready
+        run: |
+          for i in {1..30}; do
+            status=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080 || true)
+            if [[ "$status" == "200" || "$status" == "404" ]]; then echo "gateway up"; exit 0; fi
+            sleep 2
+          done
+          echo "gateway did not become ready"; docker compose ps; docker compose logs gateway-secure; exit 1
+
+      - name: Probe headers and no-admin
+        run: |
+          curl -sI http://localhost:8080 | tee /tmp/h.txt
+          # Expect a Kong server header and not a 5xx
+          if ! grep -Ei '^server:.*kong' /tmp/h.txt; then echo "missing server: kong"; exit 1; fi
+          code=$(head -n1 /tmp/h.txt | awk '{print $2}')
+          if [[ "$code" == "5"* ]]; then echo "unexpected 5xx from gateway"; exit 1; fi
+          # Admin should not be reachable
+          if curl -sI http://localhost:8001 >/dev/null; then echo "admin port exposed"; exit 1; fi
+
+      - name: Teardown
+        if: always()
+        run: docker compose -f docker-compose.yml -f docker-compose.prod.yml -f ci.smoke.yml down -v

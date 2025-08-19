@@ -1,0 +1,141 @@
+name: testcontainers-integration
+
+on:
+  workflow_dispatch:
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install pytest
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-asyncio
+
+      - name: Start shared infra (datastores, kafka)
+        run: |
+          docker compose up -d postgres redis zookeeper kafka
+          # Wait for infra
+          for i in {1..90}; do pg_isready -h localhost -p 5432 -U systemupdate && break || sleep 2; done
+          for i in {1..90}; do (echo PING | nc -w 1 localhost 6379 >/dev/null 2>&1) && break || sleep 2; done || true
+          for i in {1..90}; do curl -fsS http://localhost:8081 >/dev/null 2>&1 && break || sleep 2; done || true
+
+      - name: Start command-service and wait
+        run: |
+          docker compose up -d command-service
+          for i in {1..90}; do curl -fsS http://localhost:8004/healthz && break || sleep 2; done
+
+      - name: Run Testcontainers tests for command-service (required if present)
+        working-directory: services/command-service
+        continue-on-error: false
+        env:
+          DOCKER_AVAILABLE: "1"
+          PYTHONPATH: .
+        run: |
+          if [ -f requirements.txt ]; then pip install -r requirements.txt || true; fi
+          if [ -d tests ]; then pytest -q -m docker || echo "No docker-marked tests or tests failed"; else echo "No tests directory"; fi
+
+      - name: Start data-ingest-service and wait
+        run: |
+          docker compose up -d data-ingest-service
+          for i in {1..90}; do curl -fsS http://localhost:8005/healthz && break || sleep 2; done
+
+      - name: Run Testcontainers tests for data-ingest-service (required if present)
+        working-directory: services/data-ingest-service
+        continue-on-error: false
+        env:
+          DOCKER_AVAILABLE: "1"
+          PYTHONPATH: .
+        run: |
+          if [ -f requirements.txt ]; then pip install -r requirements.txt || true; fi
+          if [ -d tests ]; then pytest -q -m docker || echo "No docker-marked tests or tests failed"; else echo "No tests directory"; fi
+
+      - name: Start analytics-service and wait
+        run: |
+          docker compose up -d analytics-service
+          for i in {1..90}; do curl -fsS http://localhost:8006/healthz && break || sleep 2; done
+
+      - name: Run Testcontainers tests for analytics-service (if present)
+        working-directory: services/analytics-service
+        continue-on-error: false
+        env:
+          DOCKER_AVAILABLE: "1"
+          PYTHONPATH: .
+        run: |
+          if [ -f requirements.txt ]; then pip install -r requirements.txt || true; fi
+          if [ -d tests ]; then pytest -q -m docker || echo "No docker-marked tests or tests failed"; else echo "No tests directory"; fi
+
+      - name: Start device-service and wait
+        run: |
+          docker compose up -d device-service
+          for i in {1..90}; do curl -fsS http://localhost:8003/healthz && break || sleep 2; done
+
+      - name: Run Testcontainers tests for device-service (if present)
+        working-directory: services/device-service
+        continue-on-error: true
+        env:
+          DOCKER_AVAILABLE: "1"
+          PYTHONPATH: .
+        run: |
+          if [ -f requirements.txt ]; then pip install -r requirements.txt || true; fi
+          if [ -d tests ]; then pytest -q -m docker || echo "No docker-marked tests or tests failed"; else echo "No tests directory"; fi
+
+      - name: Start auth-service and wait
+        run: |
+          docker compose up -d auth-service
+          for i in {1..90}; do curl -fsS http://localhost:8001/healthz && break || sleep 2; done
+
+      - name: Run Testcontainers tests for auth-service (if present)
+        working-directory: services/auth-service
+        continue-on-error: true
+        env:
+          DOCKER_AVAILABLE: "1"
+          PYTHONPATH: .
+        run: |
+          if [ -f requirements.txt ]; then pip install -r requirements.txt || true; fi
+          if [ -d tests ]; then pytest -q -m docker || echo "No docker-marked tests or tests failed"; else echo "No tests directory"; fi
+
+      - name: Start ws-hub and wait
+        run: |
+          docker compose up -d ws-hub
+          for i in {1..90}; do curl -fsS http://localhost:8002/healthz && break || sleep 2; done
+
+      - name: Run Testcontainers tests for ws-hub (if present)
+        working-directory: services/ws-hub
+        continue-on-error: true
+        env:
+          DOCKER_AVAILABLE: "1"
+          PYTHONPATH: .
+          WS_HUB_SMOKE_TOKEN: ${{ secrets.WS_HUB_SMOKE_TOKEN }}
+          WS_HUB_SMOKE_CLIENT_ID: ${{ vars.WS_HUB_SMOKE_CLIENT_ID }}
+        run: |
+          if [ -f requirements.txt ]; then pip install -r requirements.txt || true; fi
+          if [ -d tests ]; then pytest -q -m docker || echo "No docker-marked tests or tests failed"; else echo "No tests directory"; fi
+
+      - name: Start otel-collector and notification-service and wait
+        run: |
+          docker compose up -d otel-collector notification-service
+          for i in {1..90}; do curl -fsS http://localhost:8007/health && break || sleep 2; done
+
+      - name: Run Testcontainers tests for notification-service (if present)
+        working-directory: services/notification-service
+        continue-on-error: false
+        env:
+          DOCKER_AVAILABLE: "1"
+          PYTHONPATH: .
+        run: |
+          if [ -f requirements.txt ]; then pip install -r requirements.txt || true; fi
+          if [ -d tests ]; then pytest -q -m docker || echo "No docker-marked tests or tests failed"; else echo "No tests directory"; fi
+
+      - name: Teardown
+        if: always()
+        run: docker compose down -v

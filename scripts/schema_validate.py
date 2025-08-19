@@ -6,9 +6,9 @@ Local validator for schemas in libs/proto-schemas/.
 Usage:
   python scripts/schema_validate.py
 """
+
 from __future__ import annotations
 
-import glob
 import json
 import sys
 from pathlib import Path
@@ -22,9 +22,7 @@ def validate_avro() -> int:
         return 1
 
     avro_dir = Path("libs/proto-schemas/avro")
-    paths = [
-        str(p) for p in avro_dir.rglob("*.avsc") if p.is_file()
-    ]
+    paths = [str(p) for p in avro_dir.rglob("*.avsc") if p.is_file()]
     if not paths:
         print("No Avro schemas found.")
         return 0
@@ -48,9 +46,7 @@ def validate_json_schema() -> int:
         return 1
 
     json_dir = Path("libs/proto-schemas/json")
-    paths = [
-        str(p) for p in json_dir.rglob("*.json") if p.is_file()
-    ]
+    paths = [str(p) for p in json_dir.rglob("*.json") if p.is_file()]
     if not paths:
         print("No JSON schemas found.")
         return 0

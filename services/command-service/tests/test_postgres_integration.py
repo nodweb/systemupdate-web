@@ -1,10 +1,12 @@
 import os
+
 import pytest
 
 try:
     import docker  # type: ignore
-    from testcontainers.postgres import PostgresContainer  # type: ignore
     import psycopg
+    from testcontainers.postgres import PostgresContainer  # type: ignore
+
     _DOCKER_CLIENT = docker.from_env()
     _DOCKER_AVAILABLE = True
     try:
@@ -26,7 +28,8 @@ skip_if_no_docker = pytest.mark.skipif(
 async def test_postgres_connect_and_query_version():
     with PostgresContainer("postgres:16-alpine") as pg:
         conn_str = pg.get_connection_url()
-        # psycopg3 accepts a connection string
+        # normalize DSN for psycopg3 (drop sqlalchemy driver suffix)
+        conn_str = conn_str.replace("postgresql+psycopg2://", "postgresql://")
         with psycopg.connect(conn_str) as conn:
             with conn.cursor() as cur:
                 cur.execute("SELECT version();")

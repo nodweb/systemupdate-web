@@ -1,0 +1,79 @@
+name: jwks-service-smoke
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  jwks-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install jq and curl
+        run: sudo apt-get update && sudo apt-get install -y jq curl
+
+      - name: Start infra (Postgres, Redis, Keycloak)
+        run: |
+          docker compose up -d postgres redis keycloak
+          # Wait for dependencies
+          for i in {1..60}; do curl -fsS http://localhost:5432 >/dev/null 2>&1 && break || sleep 1; done || true
+          for i in {1..60}; do curl -fsS http://localhost:6379 >/dev/null 2>&1 && break || sleep 1; done || true
+          for i in {1..90}; do curl -fsS http://localhost:8080/realms/master/.well-known/openid-configuration && break || sleep 2; done
+
+      - name: Fetch realm discovery and token
+        id: oidc
+        run: |
+          DISCO=$(curl -fsS http://localhost:8080/realms/systemupdate-dev/.well-known/openid-configuration)
+          echo "issuer=$(echo "$DISCO" | jq -r .issuer)" >> $GITHUB_OUTPUT
+          echo "jwks_uri=$(echo "$DISCO" | jq -r .jwks_uri)" >> $GITHUB_OUTPUT
+          TOKEN=$(curl -fsS -X POST \
+            -d 'client_id=frontend' -d 'grant_type=password' \
+            -d 'username=devuser' -d 'password=devpass' \
+            http://localhost:8080/realms/systemupdate-dev/protocol/openid-connect/token | jq -r .access_token)
+          echo "token=$TOKEN" >> $GITHUB_OUTPUT
+
+      - name: Create CI override for command-service with JWKS envs
+        run: |
+          cat > ci.jwks.yml <<'YAML'
+          services:
+            command-service:
+              environment:
+                AUTH_REQUIRED: "1"
+                AUTHZ_REQUIRED: "0"
+                JWKS_URL: "${JWKS_URL}"
+                OIDC_ISSUER: "${OIDC_ISSUER}"
+                OIDC_AUDIENCE: "systemupdate-api"
+          YAML
+
+      - name: Start command-service with JWKS verification
+        env:
+          JWKS_URL: ${{ steps.oidc.outputs.jwks_uri }}
+          OIDC_ISSUER: ${{ steps.oidc.outputs.issuer }}
+        run: |
+          docker compose -f docker-compose.yml -f ci.jwks.yml up -d command-service
+          for i in {1..60}; do curl -fsS http://localhost:8004/healthz && break || sleep 2; done
+
+      - name: Assert 401/200 on service with and without token
+        env:
+          TOKEN: ${{ steps.oidc.outputs.token }}
+        run: |
+          code_no_token=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8004/openapi.json)
+          echo "no-token: $code_no_token"
+          test "$code_no_token" = "401"
+          code_with_token=$(curl -s -H "Authorization: Bearer $TOKEN" -o /dev/null -w "%{http_code}" http://localhost:8004/openapi.json)
+          echo "with-token: $code_with_token"
+          test "$code_with_token" = "200"
+
+      - name: Teardown
+        if: always()
+        run: docker compose -f docker-compose.yml -f ci.jwks.yml down -v

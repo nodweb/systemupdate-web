@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+import { Link } from "react-router-dom";
 
 export default function Devices() {
   return (
@@ -10,5 +10,5 @@ export default function Devices() {
         </li>
       </ul>
     </div>
-  )
+  );
 }

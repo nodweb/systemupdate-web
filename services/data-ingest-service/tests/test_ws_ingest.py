@@ -1,4 +1,5 @@
 from fastapi.testclient import TestClient
+
 from services.data-ingest-service.app.main import app  # type: ignore
 
 

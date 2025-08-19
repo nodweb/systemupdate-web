@@ -1,7 +1,6 @@
-import pytest
 import httpx
-
-from app.main import app, on_startup, on_shutdown
+import pytest
+from app.main import app, on_shutdown, on_startup
 
 
 @pytest.mark.asyncio

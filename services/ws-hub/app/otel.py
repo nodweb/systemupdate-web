@@ -2,11 +2,12 @@ import os
 from typing import Optional
 
 from opentelemetry import trace
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import \
+  OTLPSpanExporter
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
 
 def init_tracing(service_name: str = "ws-hub", app: Optional[object] = None) -> None:
@@ -21,7 +22,9 @@ def init_tracing(service_name: str = "ws-hub", app: Optional[object] = None) -> 
     trace.set_tracer_provider(provider)
 
     if endpoint:
-        exporter = OTLPSpanExporter(endpoint=endpoint, insecure=endpoint.startswith("http://"))
+        exporter = OTLPSpanExporter(
+            endpoint=endpoint, insecure=endpoint.startswith("http://")
+        )
         provider.add_span_processor(BatchSpanProcessor(exporter))
 
     if app is not None:

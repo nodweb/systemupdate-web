@@ -1,7 +1,7 @@
 import asyncio
 import json
-import time
 import os
+import time
 from typing import Optional, Protocol
 
 from aiokafka import AIOKafkaConsumer
@@ -108,7 +108,9 @@ class PostgresIdempotencyStore:
                     key,
                 )
                 # If inserted, consider new; check existence
-                row = await conn.fetchrow("select 1 from consumer_idempotency where key=$1", key)
+                row = await conn.fetchrow(
+                    "select 1 from consumer_idempotency where key=$1", key
+                )
                 # If row exists and we just inserted, it's new; but on conflict we need another check
                 # Simplify by returning True if just inserted: asyncpg doesn't directly expose it here,
                 # so do a second insert check via unique violation approach is avoided by ON CONFLICT.
@@ -123,7 +125,9 @@ class PostgresIdempotencyStore:
                 pass
         # Fallback logic (rare path): pre-check then insert
         async with self._pool.acquire() as conn:  # type: ignore[union-attr]
-            row = await conn.fetchrow("select 1 from consumer_idempotency where key=$1", key)
+            row = await conn.fetchrow(
+                "select 1 from consumer_idempotency where key=$1", key
+            )
             if row:
                 return False
             await conn.execute("insert into consumer_idempotency(key) values($1)", key)

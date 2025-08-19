@@ -1,14 +1,15 @@
-import os
-import io
 import asyncio
-import json
+import io
+import os
+
 import pytest
 
 try:
     import docker  # type: ignore
+    from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
+    from fastavro import schemaless_reader, schemaless_writer
     from testcontainers.kafka import KafkaContainer  # type: ignore
-    from aiokafka import AIOKafkaProducer, AIOKafkaConsumer
-    from fastavro import schemaless_writer, schemaless_reader
+
     _DOCKER_CLIENT = docker.from_env()
     _DOCKER_AVAILABLE = True
     try:

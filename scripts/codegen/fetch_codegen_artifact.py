@@ -16,12 +16,14 @@ It will:
 - Download artifact 'proto-generated-types' as a zip
 - Extract to ./generated
 """
-import os
+
 import io
+import os
 import sys
 import zipfile
-import requests
 from pathlib import Path
+
+import requests
 
 WEB_ROOT = Path(__file__).resolve().parents[2] / "systemupdate-web"
 WORKFLOW_FILE = "proto-codegen.yml"
@@ -54,8 +56,17 @@ def main():
         die("Missing GH_REPO env var (e.g. 'nodweb/systemupdate-web')")
 
     # 1) find workflow id by file name
-    wf_list = github_api(f"https://api.github.com/repos/{repo}/actions/workflows", token)
-    wf = next((w for w in wf_list.get("workflows", []) if w.get("path", "").endswith(WORKFLOW_FILE)), None)
+    wf_list = github_api(
+        f"https://api.github.com/repos/{repo}/actions/workflows", token
+    )
+    wf = next(
+        (
+            w
+            for w in wf_list.get("workflows", [])
+            if w.get("path", "").endswith(WORKFLOW_FILE)
+        ),
+        None,
+    )
     if not wf:
         die(f"Workflow '{WORKFLOW_FILE}' not found")
     wid = wf["id"]
@@ -77,7 +88,9 @@ def main():
         token,
         params={"per_page": 100},
     )
-    art = next((a for a in arts.get("artifacts", []) if a.get("name") == ARTIFACT_NAME), None)
+    art = next(
+        (a for a in arts.get("artifacts", []) if a.get("name") == ARTIFACT_NAME), None
+    )
     if not art:
         die(f"Artifact '{ARTIFACT_NAME}' not found in the latest successful run")
 

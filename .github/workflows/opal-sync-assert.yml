@@ -1,0 +1,58 @@
+name: OPAL Sync Assertion
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - 'docker-compose.yml'
+      - 'auth/opa/**'
+      - '.github/workflows/opal-sync-assert.yml'
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Start OPA + OPAL (policy profile)
+        run: |
+          docker compose --profile policy up -d opa opal-server opal-client
+
+      - name: Wait for OPA ready
+        run: |
+          for i in {1..60}; do curl -fsS http://localhost:8181/health && break || sleep 2; done
+
+      - name: Wait for OPAL server
+        run: |
+          for i in {1..60}; do curl -fsS http://localhost:7002/healthcheck && break || sleep 2; done || true
+
+      - name: Install jq
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq
+
+      - name: Assert policy denies commands:ack (deterministic)
+        run: |
+          # Expect false for commands:ack per auth/opa/policy.rego
+          resp=$(curl -s -X POST http://localhost:8181/v1/data/systemupdate/allow \
+            -H 'content-type: application/json' \
+            -d '{"input": {"action": "commands:ack"}}')
+          echo "$resp" | jq .
+          val=$(echo "$resp" | jq -r '.result')
+          if [ "$val" != "false" ]; then echo "Expected deny=false for commands:ack, got: $val"; exit 1; fi
+
+      - name: Assert policy allows commands:create (default allow)
+        run: |
+          resp=$(curl -s -X POST http://localhost:8181/v1/data/systemupdate/allow \
+            -H 'content-type: application/json' \
+            -d '{"input": {"action": "commands:create"}}')
+          echo "$resp" | jq .
+          val=$(echo "$resp" | jq -r '.result')
+          if [ "$val" != "true" ]; then echo "Expected allow=true for commands:create, got: $val"; exit 1; fi
+
+      - name: Teardown
+        if: always()
+        run: docker compose --profile policy down -v
