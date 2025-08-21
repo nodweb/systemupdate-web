@@ -1,7 +1,9 @@
+import asyncio
 import logging
 import os
 import time
 from collections import defaultdict, deque
+from contextlib import asynccontextmanager
 from typing import Deque, Dict, Tuple
 
 from fastapi import Depends, FastAPI, HTTPException, Request, status
@@ -18,7 +20,7 @@ except Exception:
     import pathlib
     import sys
 
-    _root = pathlib.Path(__file__).resolve().parents[4]
+    _root = pathlib.Path(__file__).resolve().parents[3]
     _ac_path = _root / "libs" / "shared-python" / "security" / "authorize_client.py"
     spec = importlib.util.spec_from_file_location("_authorize_client", _ac_path)
     if spec and spec.loader:
@@ -40,7 +42,7 @@ except Exception:
         import pathlib
         import sys
 
-        _root = pathlib.Path(__file__).resolve().parents[4]
+        _root = pathlib.Path(__file__).resolve().parents[3]
         _opa_path = _root / "libs" / "shared-python" / "security" / "opa_client.py"
         _spec_opa = importlib.util.spec_from_file_location("_opa_client", _opa_path)
         if _spec_opa and _spec_opa.loader:
@@ -64,7 +66,7 @@ except Exception:
         import pathlib
         import sys
 
-        _root = pathlib.Path(__file__).resolve().parents[4]
+        _root = pathlib.Path(__file__).resolve().parents[3]
         _jwt_path = _root / "libs" / "shared-python" / "security" / "jwt_verifier.py"
         _spec_jwt = importlib.util.spec_from_file_location("_jwt_verifier", _jwt_path)
         if _spec_jwt and _spec_jwt.loader:
@@ -92,6 +94,14 @@ THROTTLE_WINDOW_SECONDS = int(os.getenv("NOTIF_THROTTLE_WINDOW_SECONDS", "60"))
 THROTTLE_LIMIT = int(os.getenv("NOTIF_THROTTLE_LIMIT", "20"))
 _buckets: Dict[Tuple[str, str], Deque[float]] = defaultdict(deque)
 
+# Background worker controls
+NOTIF_WORKER_ENABLED = os.getenv("NOTIF_WORKER_ENABLED", "true").lower() in {
+    "1",
+    "true",
+    "yes",
+}
+_worker_task: asyncio.Task | None = None
+
 
 def _key_for_alert(labels: Dict) -> Tuple[str, str]:
     name = str(labels.get("alertname") or "unknown")
@@ -116,6 +126,11 @@ def _allow_through(labels: Dict) -> bool:
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/worker/status")
+def worker_status():
+    return {"running": bool(_worker_task is not None and not _worker_task.done())}
 
 
 @app.post("/alerts", dependencies=DEPS_AUTH)
@@ -159,6 +174,102 @@ async def receive_alerts(request: Request):
     return JSONResponse(
         {"received": len(alerts), "accepted": accepted, "throttled": throttled}
     )
+
+
+# ---------------- Lifespan management ----------------
+def _in_pytest() -> bool:
+    return bool(os.environ.get("PYTEST_CURRENT_TEST"))
+
+
+async def _worker_loop():
+    # Placeholder: could flush metrics, rotate buckets, or process queue
+    try:
+        while True:
+            await asyncio.sleep(60.0)
+    except asyncio.CancelledError:
+        raise
+
+
+async def _start_worker():
+    global _worker_task
+    if not NOTIF_WORKER_ENABLED:
+        try:
+            logger.info(
+                "Service lifecycle event",
+                extra={
+                    "service": "notification-service",
+                    "event": "startup",
+                    "component": "worker",
+                    "enabled": False,
+                    "reason": "NOTIF_WORKER_ENABLED=false",
+                },
+            )
+        except Exception:
+            pass
+        return
+    if _in_pytest():
+        try:
+            logger.info(
+                "Service lifecycle event",
+                extra={
+                    "service": "notification-service",
+                    "event": "startup",
+                    "component": "worker",
+                    "enabled": False,
+                    "reason": "pytest_gating_worker",
+                },
+            )
+        except Exception:
+            pass
+        return
+    _worker_task = asyncio.create_task(_worker_loop())
+    try:
+        logger.info(
+            "Service lifecycle event",
+            extra={
+                "service": "notification-service",
+                "event": "startup",
+                "component": "worker",
+                "enabled": True,
+            },
+        )
+    except Exception:
+        pass
+
+
+async def _stop_worker():
+    global _worker_task
+    if _worker_task is not None:
+        _worker_task.cancel()
+        try:
+            await _worker_task
+        except Exception:
+            pass
+        finally:
+            _worker_task = None
+        try:
+            logger.info(
+                "Service lifecycle event",
+                extra={
+                    "service": "notification-service",
+                    "event": "shutdown",
+                    "component": "worker",
+                },
+            )
+        except Exception:
+            pass
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    await _start_worker()
+    try:
+        yield
+    finally:
+        await _stop_worker()
+
+
+app.router.lifespan_context = lifespan
 
 
 # --------------- Optional auth/authz helpers ---------------
