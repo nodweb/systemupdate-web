@@ -398,7 +398,7 @@ kubectl apply -f k8s/sample-consumer/service.yaml
 - [ ] Contract tests validated (Schemathesis against app or HTTP endpoint)
 - [ ] Docker/Testcontainers-based integration tests pass on VPS
 
-<!-- markdownlint-enable MD013 MD022 MD032 MD031 -->
+<!-- markdownlint-enable removed to keep disables active through end of file -->
 
 ## OPA/OPAL Troubleshooting
 
