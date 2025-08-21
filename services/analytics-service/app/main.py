@@ -118,6 +118,16 @@ except Exception:
     pass
 
 
+# Security headers middleware (no-op if helper missing)
+try:
+    from libs.shared_python.security.headers import \
+      add_security_headers  # type: ignore
+
+    add_security_headers(app)
+except Exception:
+    pass
+
+
 @app.get("/healthz")
 async def healthz():
     return {"status": "ok"}
@@ -169,6 +179,14 @@ async def start_stream(topics: Optional[List[str]] = None, request: Request = No
 
 # ---------------- Optional Kafka consumer scaffold ----------------
 LOGGER = logging.getLogger(__name__)
+# Prefer structured logger from shared libs, but don't fail if unavailable
+try:
+    from libs.shared_python.logging_utils import \
+      get_structured_logger  # type: ignore
+
+    LOGGER = get_structured_logger("analytics-service")
+except Exception:
+    pass
 KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "kafka:9092")
 CONSUME_ENABLED = os.getenv("ANALYTICS_CONSUME_ENABLED", "false").lower() in {
     "1",

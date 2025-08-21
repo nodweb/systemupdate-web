@@ -84,8 +84,25 @@ if (
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("notification-service")
+# Prefer structured logger from shared libs, but don't fail if unavailable
+try:
+    from libs.shared_python.logging_utils import \
+      get_structured_logger  # type: ignore
+
+    logger = get_structured_logger("notification-service")
+except Exception:
+    pass
 
 app = FastAPI(title="notification-service", version="0.3.0")
+
+# Security headers middleware (no-op if helper missing)
+try:
+    from libs.shared_python.security.headers import \
+      add_security_headers  # type: ignore
+
+    add_security_headers(app)
+except Exception:
+    pass
 
 # Throttling config (in-memory sliding window per (alertname, source))
 THROTTLE_WINDOW_SECONDS = int(os.getenv("NOTIF_THROTTLE_WINDOW_SECONDS", "60"))
