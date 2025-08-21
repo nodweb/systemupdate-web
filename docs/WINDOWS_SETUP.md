@@ -1,3 +1,4 @@
+<!-- markdownlint-disable MD013 MD022 MD031 MD032 -->
 # Windows Dev Setup Guide (SystemUpdate-Web)
 
 This guide explains how to set up a Windows 10/11 development environment using the automated script at `scripts/windows/setup-dev.ps1`.
