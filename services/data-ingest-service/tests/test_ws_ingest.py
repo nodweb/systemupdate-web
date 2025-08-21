@@ -1,6 +1,5 @@
+from app.main import app
 from fastapi.testclient import TestClient
-
-from services.data-ingest-service.app.main import app  # type: ignore
 
 
 def test_ws_ingest_accepts_and_replies():
