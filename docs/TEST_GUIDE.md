@@ -10,11 +10,35 @@
 [![Gateway OIDC Smoke (Optional)](https://github.com/nodweb/systemupdate-web/actions/workflows/gateway-oidc-smoke.yml/badge.svg)](https://github.com/nodweb/systemupdate-web/actions/workflows/gateway-oidc-smoke.yml)
 [![Policies CI](https://github.com/nodweb/systemupdate-policies/actions/workflows/policy-ci.yml/badge.svg)](https://github.com/nodweb/systemupdate-policies/actions/workflows/policy-ci.yml)
 
+[![Web JWT Smoke (Isolated)](https://github.com/nodweb/systemupdate-web/actions/workflows/web-jwt-smoke.yml/badge.svg)](https://github.com/nodweb/systemupdate-web/actions/workflows/web-jwt-smoke.yml)
+[![WS Hub Smoke (Isolated)](https://github.com/nodweb/systemupdate-web/actions/workflows/ws-hub-smoke.yml/badge.svg)](https://github.com/nodweb/systemupdate-web/actions/workflows/ws-hub-smoke.yml)
+[![Gateway JWT Route Smoke](https://github.com/nodweb/systemupdate-web/actions/workflows/gateway-jwt-route-smoke.yml/badge.svg)](https://github.com/nodweb/systemupdate-web/actions/workflows/gateway-jwt-route-smoke.yml)
+[![Observability Artifacts](https://github.com/nodweb/systemupdate-web/actions/workflows/observability-artifacts.yml/badge.svg)](https://github.com/nodweb/systemupdate-web/actions/workflows/observability-artifacts.yml)
+
 [![Testcontainers Integration](https://github.com/nodweb/systemupdate-web/actions/workflows/testcontainers.yml/badge.svg)](https://github.com/nodweb/systemupdate-web/actions/workflows/testcontainers.yml)
 
-<!-- markdownlint-disable MD013 MD022 MD032 MD031 -->
-
 This guide shows how to run tests for all Python services and how to use the Windows setup script.
+
+### JWT Smoke (Isolated) Logs
+
+- In each CI run of `web-jwt-smoke.yml`, download the uploaded artifact containing compose logs.
+- Locally, a copy of the last run is saved to `systemupdate-web/jwt-smoke-last.log` by the workflow.
+
+### WS Hub Smoke (Isolated)
+
+- Workflow: `.github/workflows/ws-hub-smoke.yml`
+- Prerequisites: set repository secret `WS_HUB_SMOKE_TOKEN` (and optional var `WS_HUB_SMOKE_CLIENT_ID`).
+- What it does: starts only `redis` and `ws-hub`, waits for `/healthz`, opens a WebSocket with `websocat`, uploads `ws-smoke-logs.txt` as artifact, and tears down.
+
+### Gateway JWT Route Smoke
+
+- Workflow: `.github/workflows/gateway-jwt-route-smoke.yml`
+- What it does: brings up `auth-service` + `gateway` with a minimal declarative config enabling JWT on `/ci/jwt/health`. Generates HS256 token in CI, asserts 401 without token and 200 with token. Uploads `kong.ci.yml` and logs as artifacts.
+
+### Observability Artifacts
+
+- Workflow: `.github/workflows/observability-artifacts.yml`
+- What it does: lists files under `observability/`, validates Prometheus config with `prom/prometheus` container when present, and uploads the directory as CI artifacts for review.
 
 For preparing and running full real tests (contract, integration, security) on a VPS, see:
 
@@ -27,6 +51,27 @@ For preparing and running full real tests (contract, integration, security) on a
 - `services/command-service`
 - `services/analytics-service`
 - `services/notification-service`
+
+## Repository pytest configuration and markers
+
+The root `pytest.ini` standardizes test behavior across services:
+
+- `addopts = --import-mode=importlib` to avoid cross-package test name collisions.
+- Markers:
+  - `docker`: tests that require Docker/Testcontainers or external services (Kafka, Keycloak, OPA, DB).
+  - `timeout`: for tests that need extended timeouts (e.g., ws-hub async cases).
+
+Common invocations from repo root:
+
+```powershell
+# Fast local run (skips docker-marked tests)
+python -m pytest -q -m "not docker"
+
+# Only external/integration tests
+python -m pytest -q -m docker
+```
+
+When running per-service from the service folder, set `PYTHONPATH='.'` if needed, or rely on the root run which handles paths and markers automatically.
 
 ## Quick start with automation (Windows)
 Use the setup script to create venvs, install dependencies, and optionally run tests.
@@ -159,6 +204,51 @@ CI Workflows:
 - Gateway OIDC Smoke (Optional): `.github/workflows/gateway-oidc-smoke.yml` (gated by repository variable `KONG_ENTERPRISE=1`)
 - Prod Security Smoke: `.github/workflows/prod-security-smoke.yml`
 - JWKS Service Smoke: `.github/workflows/jwks-service-smoke.yml`
+- Web Compose Validation: `.github/workflows/web-compose-validate.yml` — validates compose syntax and enforces:
+  - No absolute Windows host paths in compose files (use relative `./` paths).
+  - Healthchecks present for core services in both `docker-compose.yml` and `compose.merged.yml`.
+
+## Pytest gating (external dependencies)
+
+- During `pytest`, services should skip starting external dependencies (Kafka consumers/producers, DB schedulers).
+- Convention: check `PYTEST_CURRENT_TEST` in startup paths (now handled via FastAPI lifespan where applicable).
+- Example behavior (analytics-service): Kafka consumer is not started when `PYTEST_CURRENT_TEST` is set, keeping smoke tests deterministic and fast.
+
+Recommended patterns implemented across services:
+
+- Use FastAPI lifespan instead of deprecated `on_event` for startup/shutdown.
+- Guard external client creation (Kafka producers/consumers, DB schedulers) with `if os.environ.get("PYTEST_CURRENT_TEST"): return` in lifespan.
+- Optionally bypass auth during pytest for hermetic tests:
+  - Example (`services/data-ingest-service/app/main.py`):
+    - `AUTH_REQUIRED` is forced to `False` when `PYTEST_CURRENT_TEST` is set.
+
+Timezone-aware timestamps:
+
+- All services and shared libs use `datetime.now(timezone.utc)` for consistent, aware timestamps (avoid `datetime.utcnow()`/`datetime.UTC`).
+
+WebSocket testing stability:
+
+- Accept WS connection before auth checks to avoid handshake-close exceptions with Starlette `TestClient`.
+- Dynamically import service `app/main.py` by file path in tests when service folder has hyphens (e.g., `data-ingest-service`) to avoid importing the repo-level `app`.
+  - See `services/data-ingest-service/tests/test_ws_ingest.py` for the import-by-path pattern.
+
+## Safe import fallback pattern (shared `app` package)
+
+- Some tests run services outside the monorepo package layout. Use dynamic imports to resolve shared modules:
+  - `app.handlers.exception_handler`
+  - `app.middleware.context`, `app.middleware.logging_middleware`
+- Pattern: temporarily inject a synthetic `app` module pointing to `systemupdate-web/app/` on `sys.path` and import required symbols. Restore `sys.modules['app']` afterward. This enables consistent middleware/handlers in tests without altering packaging.
+
+## Middleware and error-format smoke tests
+
+- Expected headers on all responses: `X-Request-ID` (and optionally `X-Process-Time`).
+- Standardized error JSON shape:
+  ```json
+  { "error": { "code": "<string>", "message": "<string>", "details": {"...": "..."}? } }
+  ```
+- Minimal pattern (per service):
+  - GET `/healthz` → `200`, header `X-Request-ID` present.
+  - GET `/__not_found__` → `404`, JSON body matches the standardized error shape, header `X-Request-ID` present.
 
 ## Testcontainers Integration CI (manual)
 
@@ -398,8 +488,6 @@ kubectl apply -f k8s/sample-consumer/service.yaml
 - [ ] Contract tests validated (Schemathesis against app or HTTP endpoint)
 - [ ] Docker/Testcontainers-based integration tests pass on VPS
 
-<!-- markdownlint-enable MD013 MD022 MD032 MD031 -->
-
 ## OPA/OPAL Troubleshooting
 
 - Ensure OPA is healthy:
@@ -415,3 +503,5 @@ kubectl apply -f k8s/sample-consumer/service.yaml
   curl -fsS http://localhost:7002/healthcheck
   ```
 - Logs: check `opal-server`, `opal-client`, and `opa` container logs for sync events and decision logs.
+
+<!-- markdownlint-enable MD001 MD013 MD022 MD032 MD031 -->

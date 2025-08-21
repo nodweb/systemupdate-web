@@ -1,5 +1,7 @@
 # Windows Dev Setup Guide (SystemUpdate-Web)
 
+<!-- markdownlint-disable MD013 MD022 MD032 MD031 MD005 MD007 MD050 -->
+
 This guide explains how to set up a Windows 10/11 development environment using the automated script at `scripts/windows/setup-dev.ps1`.
 
 ## Prerequisites
@@ -62,10 +64,41 @@ Then re-run the script with `-SkipUbuntuInstall`.
 - Script will try to start Docker Desktop and wait up to ~120s for the engine.
 - If it doesn’t become ready, start Docker Desktop manually and re-run the script (you can use `-NoTests` to speed up).
 
+### Testcontainers stability tips
+- Ensure WSL2 integration is enabled for your default Linux distro in Docker Desktop settings.
+- Increase resource limits (Docker Desktop → Settings → Resources) if containers start slowly.
+- First compose up after reboot can be slow; re-run tests after Docker becomes healthy.
+- Consider pulling base images ahead of time to warm cache:
+  ```powershell
+  docker pull postgres:16
+  docker pull redis:7
+  docker pull confluentinc/cp-kafka:7.6.0
+  docker pull testcontainers/ryuk:0.8.1
+  ```
+- If networking is flaky, toggle Docker Desktop WSL integration off/on and restart Docker Desktop.
+
+### Quick pytest commands (Windows PowerShell)
+
+From repo root `systemupdate-web/`:
+
+```powershell
+# Fast local run (skips docker-marked tests)
+python -m pytest -q -m "not docker"
+
+# Only Docker/Testcontainers external tests
+python -m pytest -q -m docker
+```
+
+Notes:
+
+- The repo uses `--import-mode=importlib` in `pytest.ini` to avoid cross-package clashes.
+- Some services bypass external dependencies during pytest by checking `PYTEST_CURRENT_TEST` in their FastAPI lifespan.
+
 ## Troubleshooting
 - "The argument 'scripts/windows/setup-dev.ps1' to the -File parameter does not exist": You ran from a different folder. Use the full path or run from the repo root.
 - WSL install progress seems stuck: it can take several minutes. Ensure Windows Update and Microsoft Store are accessible. You can also install Ubuntu from the Microsoft Store, run it once, then re-run the script with `-SkipUbuntuInstall`.
 - Need Admin: Some steps (enabling features) require Administrator PowerShell.
+ - Testcontainers cannot connect to Docker: verify `wsl.exe -l -v` shows your distro running and Docker Desktop has WSL integration enabled for it. Restart both WSL (`wsl --shutdown`) and Docker Desktop.
 
 ## What gets created
 - Per-service venvs: `services/<service>/.venv/`
