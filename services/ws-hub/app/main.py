@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from typing import Dict
 
 from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
+from app.config import settings
 from pydantic import BaseModel
 
 from .policy import allow_ws_connect
@@ -20,7 +21,7 @@ except Exception:
     # Do not fail service if observability is misconfigured in dev
     pass
 
-HEARTBEAT_INTERVAL_SEC = 15
+HEARTBEAT_INTERVAL_SEC = int(getattr(settings, "HEARTBEAT_INTERVAL_SEC", 15))
 
 
 class HealthResponse(BaseModel):

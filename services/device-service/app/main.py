@@ -4,6 +4,7 @@ from typing import Dict, List, Optional
 from uuid import uuid4
 
 from fastapi import Depends, FastAPI, HTTPException, Request, status
+from app.config import settings
 from pydantic import BaseModel, Field
 
 # Safe import for shared authorize client despite hyphen in directory name
@@ -102,6 +103,28 @@ except Exception:
 
 app = FastAPI(title="SystemUpdate Device Service", version="0.2.0")
 
+# Optional rate limiting (no-op if slowapi is unavailable)
+try:
+    from slowapi import Limiter  # type: ignore
+    from slowapi.errors import RateLimitExceeded  # type: ignore
+    from slowapi.util import get_remote_address  # type: ignore
+    from slowapi.middleware import SlowAPIMiddleware  # type: ignore
+    from slowapi import _rate_limit_exceeded_handler  # type: ignore
+
+    limiter = Limiter(key_func=get_remote_address)
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    app.add_middleware(SlowAPIMiddleware)
+
+    def _limit(rule: str):
+        return limiter.limit(rule)
+except Exception:  # pragma: no cover - optional dependency
+    def _limit(_rule: str):  # type: ignore
+        def _decor(fn):
+            return fn
+
+        return _decor
+
 # OpenTelemetry initialization (no-op if not configured via env)
 try:
     from .otel import init_tracing
@@ -134,13 +157,13 @@ class Device(DeviceCreate):
 _db: Dict[str, Device] = {}
 
 
-AUTH_REQUIRED = os.getenv("AUTH_REQUIRED", "false").lower() in {"1", "true", "yes"}
-AUTHZ_REQUIRED = os.getenv("AUTHZ_REQUIRED", "false").lower() in {"1", "true", "yes"}
-AUTH_INTROSPECT_URL = os.getenv(
-    "AUTH_INTROSPECT_URL", "http://auth-service:8001/api/auth/introspect"
+AUTH_REQUIRED = bool(getattr(settings, "AUTH_REQUIRED", False))
+AUTHZ_REQUIRED = bool(getattr(settings, "AUTHZ_REQUIRED", False))
+AUTH_INTROSPECT_URL = getattr(
+    settings, "AUTH_INTROSPECT_URL", "http://auth-service:8001/api/auth/introspect"
 )
-AUTH_AUTHORIZE_URL = os.getenv(
-    "AUTH_AUTHORIZE_URL", "http://auth-service:8001/api/auth/authorize"
+AUTH_AUTHORIZE_URL = getattr(
+    settings, "AUTH_AUTHORIZE_URL", "http://auth-service:8001/api/auth/authorize"
 )
 
 
@@ -214,6 +237,7 @@ async def _check_authorize(token: Optional[str], action: str, resource: str) -> 
 @app.post(
     "/api/devices", response_model=Device, status_code=201, dependencies=DEPS_AUTH
 )
+@_limit("30/minute")
 async def create_device(payload: DeviceCreate, request: Request) -> Device:
     token = await _check_auth(request.headers)
     await _check_authorize(token, action="devices:create", resource="device")
@@ -229,6 +253,7 @@ async def create_device(payload: DeviceCreate, request: Request) -> Device:
     responses={404: {"description": "Not Found"}},
     dependencies=DEPS_AUTH,
 )
+@_limit("120/minute")
 async def get_device(dev_id: str, request: Request) -> Device:
     token = await _check_auth(request.headers)
     await _check_authorize(token, action="devices:read", resource=dev_id)
@@ -239,6 +264,7 @@ async def get_device(dev_id: str, request: Request) -> Device:
 
 
 @app.get("/api/devices", response_model=List[Device], dependencies=DEPS_AUTH)
+@_limit("60/minute")
 async def list_devices(request: Request) -> List[Device]:
     token = await _check_auth(request.headers)
     await _check_authorize(token, action="devices:read", resource="device")
@@ -256,6 +282,7 @@ class DeviceUpdate(BaseModel):
     responses={404: {"description": "Not Found"}},
     dependencies=DEPS_AUTH,
 )
+@_limit("30/minute")
 async def update_device(dev_id: str, payload: DeviceUpdate, request: Request) -> Device:
     token = await _check_auth(request.headers)
     await _check_authorize(token, action="devices:update", resource=dev_id)
@@ -276,6 +303,7 @@ async def update_device(dev_id: str, payload: DeviceUpdate, request: Request) ->
     responses={404: {"description": "Not Found"}},
     dependencies=DEPS_AUTH,
 )
+@_limit("30/minute")
 async def delete_device(dev_id: str, request: Request):
     token = await _check_auth(request.headers)
     await _check_authorize(token, action="devices:delete", resource=dev_id)
