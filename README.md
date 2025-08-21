@@ -202,3 +202,4 @@ More details: `docs/TEST_GUIDE.md`.
 - M5: Scale-out + Canary + Load/Chaos
 
 <!-- markdownlint-enable MD013 MD032 -->
+[![Modernization Status](https://img.shields.io/badge/Modernization-100%25%20Complete-success)](docs/PROJECT_COMPLETION_REPORT.md)

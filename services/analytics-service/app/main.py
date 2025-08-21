@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request, status
+from libs.shared_python.exceptions import ServiceError
 
 # Safe import for shared authorize client despite hyphen in directory name
 try:
@@ -291,22 +292,16 @@ async def _check_auth(headers: Dict[str, str]) -> Optional[str]:
         return None
     token = await _bearer_token(headers)
     if not token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="missing bearer token"
-        )
+        raise ServiceError(401, "UNAUTHORIZED", "missing bearer token")
     try:
         data = await auth_introspect(token, url=AUTH_INTROSPECT_URL)
         if not data.get("active"):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, detail="inactive token"
-            )
+            raise ServiceError(401, "UNAUTHORIZED", "inactive token")
         _state["_last_token"] = token
     except HTTPException:
         raise
     except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="auth failure"
-        )
+        raise ServiceError(401, "UNAUTHORIZED", "auth failure")
     return token
 
 
@@ -314,17 +309,13 @@ async def _check_authorize(token: Optional[str], action: str, resource: str) -> 
     if not AUTHZ_REQUIRED:
         return
     if not token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="missing bearer token"
-        )
+        raise ServiceError(401, "UNAUTHORIZED", "missing bearer token")
     try:
         data = await auth_authorize(
             token, action=action, resource=resource, url=AUTH_AUTHORIZE_URL
         )
         if not data.get("allow"):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, detail="forbidden"
-            )
+            raise ServiceError(403, "FORBIDDEN", "forbidden")
         # Optional OPA enforcement
         if opa_enforce is not None:
             allowed = await opa_enforce(
@@ -336,15 +327,11 @@ async def _check_authorize(token: Optional[str], action: str, resource: str) -> 
                 required=None,
             )
             if not allowed:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN, detail="forbidden"
-                )
+                raise ServiceError(403, "FORBIDDEN", "forbidden")
     except HTTPException:
         raise
     except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="authz failure"
-        )
+        raise ServiceError(403, "FORBIDDEN", "authz failure")
 
 
 @app.on_event("startup")

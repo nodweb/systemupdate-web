@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional
 import httpx
 from fastapi import (FastAPI, HTTPException, Request, WebSocket,
                      WebSocketDisconnect)
+from libs.shared_python.exceptions import ServiceError
 from app.config import settings
 from pydantic import BaseModel, Field, ValidationError
 
@@ -112,7 +113,7 @@ async def _check_auth(headers: Dict[str, str]) -> None:
         return
     auth = headers.get("authorization") or headers.get("Authorization")
     if not auth or not auth.lower().startswith("bearer "):
-        raise HTTPException(status_code=401, detail="missing bearer token")
+        raise ServiceError(401, "UNAUTHORIZED", "missing bearer token")
     token = auth.split(" ", 1)[1]
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
@@ -120,12 +121,12 @@ async def _check_auth(headers: Dict[str, str]) -> None:
             r.raise_for_status()
             data = r.json()
             if not data.get("active"):
-                raise HTTPException(status_code=401, detail="inactive token")
+                raise ServiceError(401, "UNAUTHORIZED", "inactive token")
     except HTTPException:
         raise
     except Exception:
         # Fail closed when auth is required
-        raise HTTPException(status_code=401, detail="auth failure")
+        raise ServiceError(401, "UNAUTHORIZED", "auth failure")
 
 
 @app.post("/ingest")
@@ -135,7 +136,7 @@ async def ingest(body: IngestBody, request: Request):
     await _check_auth(request.headers)  # may raise 401
     # Validate kind if list provided
     if ALLOWED_KINDS is not None and body.kind not in ALLOWED_KINDS:
-        raise HTTPException(status_code=422, detail=f"kind '{body.kind}' not allowed")
+        raise ServiceError(422, "VALIDATION_ERROR", f"kind '{body.kind}' not allowed")
     payload = {
         "device_id": body.device_id,
         "kind": body.kind,
@@ -143,7 +144,7 @@ async def ingest(body: IngestBody, request: Request):
     }
     encoded = json.dumps(payload, separators=(",", ":")).encode("utf-8")
     if len(encoded) > MAX_BYTES:
-        raise HTTPException(status_code=413, detail="payload too large")
+        raise ServiceError(413, "PAYLOAD_TOO_LARGE", "payload too large")
     sent = False
     if producer is not None:
         try:

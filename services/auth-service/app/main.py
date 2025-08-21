@@ -1,6 +1,7 @@
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException, status
+from libs.shared_python.exceptions import ServiceError
 from app.config import settings
 from pydantic import BaseModel
 
@@ -99,7 +100,5 @@ async def authorize(req: AuthorizeRequest) -> AuthorizeResponse:
 
     allow, reason = authorize_action(claims, req.action, req.resource)
     if not allow:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail=reason or "forbidden"
-        )
+        raise ServiceError(403, "FORBIDDEN", reason or "forbidden")
     return AuthorizeResponse(allow=True, reason=reason)
