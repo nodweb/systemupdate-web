@@ -1,15 +1,17 @@
 # Windows Dev Setup Guide (SystemUpdate-Web)
 
-<!-- markdownlint-disable MD013 MD022 MD032 MD031 MD005 MD007 MD050 -->
+<!-- markdownlint-disable MD013 -->
 
 This guide explains how to set up a Windows 10/11 development environment using the automated script at `scripts/windows/setup-dev.ps1`.
 
 ## Prerequisites
+
 - Windows 10/11 (Admin rights)
 - Stable internet connection
 - PowerShell (Run as Administrator)
 
 ## What the script does
+
 - Enables Windows features: `VirtualMachinePlatform`, `Microsoft-Windows-Subsystem-Linux` (WSL)
 - Sets WSL2 as default and optionally installs Ubuntu
 - Installs Python 3.12, Git, and Docker Desktop via winget (if missing)
@@ -17,20 +19,33 @@ This guide explains how to set up a Windows 10/11 development environment using 
 - Creates per-service Python virtual environments and installs dependencies
 - Optionally runs pytest for each service
 
+
 ## Usage
+
+ 
+
 Run PowerShell as Administrator.
 
+ 
+
 - From anywhere (full path):
+
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File "C:\Users\UC\AndroidStudioProjects\SystemUpdate\systemupdate-web\scripts\windows\setup-dev.ps1"
 ```
 
+ 
+
 - From the repo root `systemupdate-web/` (relative path):
+
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/setup-dev.ps1
 ```
 
+ 
+
 ### Useful flags
+
 - `-SkipUbuntuInstall` — Skips WSL distro installation (use after you finished Ubuntu first-run).
 - `-NoTests` (alias of `-SkipTests`) — Do not run pytest after dependency install.
 - `-Only "svc1,svc2"` — Only process selected services (names are folder names under `services/`):
@@ -42,6 +57,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/setup-dev.ps
   - `notification-service`
 
 Examples:
+
 ```powershell
 # Install everything and run tests
 powershell -NoProfile -ExecutionPolicy Bypass -File "...\scripts\windows\setup-dev.ps1"
@@ -57,18 +73,22 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "...\scripts\windows\setup-d
 ```
 
 ## First run of Ubuntu (WSL)
+
 After `wsl --install -d Ubuntu`, open the Ubuntu app from Start Menu once to complete user/password setup.
 Then re-run the script with `-SkipUbuntuInstall`.
 
 ## Docker Desktop
+
 - Script will try to start Docker Desktop and wait up to ~120s for the engine.
 - If it doesn’t become ready, start Docker Desktop manually and re-run the script (you can use `-NoTests` to speed up).
 
 ### Testcontainers stability tips
+
 - Ensure WSL2 integration is enabled for your default Linux distro in Docker Desktop settings.
 - Increase resource limits (Docker Desktop → Settings → Resources) if containers start slowly.
 - First compose up after reboot can be slow; re-run tests after Docker becomes healthy.
 - Consider pulling base images ahead of time to warm cache:
+
   ```powershell
   docker pull postgres:16
   docker pull redis:7
@@ -95,20 +115,24 @@ Notes:
 - Some services bypass external dependencies during pytest by checking `PYTEST_CURRENT_TEST` in their FastAPI lifespan.
 
 ## Troubleshooting
+
 - "The argument 'scripts/windows/setup-dev.ps1' to the -File parameter does not exist": You ran from a different folder. Use the full path or run from the repo root.
 - WSL install progress seems stuck: it can take several minutes. Ensure Windows Update and Microsoft Store are accessible. You can also install Ubuntu from the Microsoft Store, run it once, then re-run the script with `-SkipUbuntuInstall`.
 - Need Admin: Some steps (enabling features) require Administrator PowerShell.
- - Testcontainers cannot connect to Docker: verify `wsl.exe -l -v` shows your distro running and Docker Desktop has WSL integration enabled for it. Restart both WSL (`wsl --shutdown`) and Docker Desktop.
+- Testcontainers cannot connect to Docker: verify `wsl.exe -l -v` shows your distro running and Docker Desktop has WSL integration enabled for it. Restart both WSL (`wsl --shutdown`) and Docker Desktop.
 
 ## What gets created
+
 - Per-service venvs: `services/<service>/.venv/`
 - Dependencies installed from `requirements.txt` in each service
 
 ## Next steps
+
 - See `docs/TEST_GUIDE.md` for running tests, environment toggles (e.g., `DOCKER_AVAILABLE`), and common issues.
 - See `docs/AUTH_GUIDE.md` for enabling JWT auth, authorization, and OPA policy checks.
 
 ### Security toggles (quick reference)
+
 You can enable or disable authentication/authorization and OPA evaluation via environment variables before starting a service or running tests. See `docs/AUTH_GUIDE.md` for full details.
 
 ```powershell
@@ -129,6 +153,7 @@ $Env:AUTH_DEV_SCOPE = 'read write admin'
 ```
 
 ## Generate trace load (optional)
+
 To visualize distributed tracing and the latency/error dashboards, you can generate sample traffic with the PowerShell script:
 
 ```powershell
@@ -149,6 +174,7 @@ Notes:
 - Open Grafana at `http://localhost:3000` → Explore (Tempo) or dashboards under folder `SystemUpdate`.
 
 Examples:
+
 ```powershell
 # Burst profile with occasional errors
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/generate-trace-load.ps1 -Profile burst -ErrorRate 0.1 -Qps 20 -DurationSeconds 90
@@ -156,3 +182,5 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/generate-tra
 # Spike profile to stress latency SLO
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/generate-trace-load.ps1 -Profile spike -Qps 30 -DurationSeconds 60
 ```
+
+<!-- markdownlint-enable MD013 -->
