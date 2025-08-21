@@ -88,6 +88,11 @@ services:
     profiles: ["dev"]
     ports:
       - "9115:9115"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9115/metrics >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
 
   kafka:
     image: bitnami/kafka:3.7
@@ -410,6 +415,11 @@ services:
       - "8181:8181"
     volumes:
       - ./auth/opa:/policy:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8181/health >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
 
   # Optional: OPAL server and client for policy bundle sync (demo)
   opal-server:
@@ -429,6 +439,11 @@ services:
     depends_on:
       opa:
         condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "(curl -s -o /dev/null -w '%{http_code}' http://localhost:7002/ || echo 000) | grep -E '200|404' >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
 
   opal-client:
     image: permitio/opal-client:latest
@@ -453,6 +468,11 @@ services:
     ports:
       - "4317:4317"  # OTLP/gRPC
       - "4318:4318"  # OTLP/HTTP
+    healthcheck:
+      test: ["CMD-SHELL", "(curl -s -o /dev/null -w '%{http_code}' http://localhost:4318/ || echo 000) | grep -E '200|404' >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
 
   tempo:
     image: grafana/tempo:2.6.0
@@ -465,6 +485,11 @@ services:
       - "3200:3200"   # Tempo Query (HTTP)
       - "4319:4317"   # OTLP/gRPC (host 4319 -> container 4317 to avoid conflict)
       - "4320:4318"   # OTLP/HTTP (host 4320 -> container 4318)
+    healthcheck:
+      test: ["CMD-SHELL", "(curl -s -o /dev/null -w '%{http_code}' http://localhost:3200/ || echo 000) | grep -E '200|404' >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
 
 volumes:
   pgdata:
