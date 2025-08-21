@@ -194,6 +194,80 @@ CI Workflows:
 - Docker engine not ready: Start Docker Desktop and retry tests. On first startup, it may take 1–2 minutes.
 - WSL install required: If the setup script prompts for WSL install, complete Ubuntu first-run from Start Menu, then re-run with `-SkipUbuntuInstall`.
 
+## Pytest gating for background workers
+
+All services use FastAPI lifespan with background workers that are gated during pytest to avoid long-running loops and external dependencies.
+
+- Gate is enabled by detecting `PYTEST_CURRENT_TEST` in the environment.
+- Status endpoint `/worker/status` returns `{ "running": false }` during tests.
+
+Example (service app):
+
+```python
+from contextlib import asynccontextmanager
+import asyncio, os, logging
+from fastapi import FastAPI
+
+LOGGER = logging.getLogger("service")
+worker_task: asyncio.Task | None = None
+
+def is_pytest() -> bool:
+    return bool(os.environ.get("PYTEST_CURRENT_TEST"))
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global worker_task
+    if not is_pytest():
+        worker_task = asyncio.create_task(asyncio.sleep(3600))
+        LOGGER.info("worker started", extra={"event": "startup", "enabled": True})
+    else:
+        LOGGER.info("worker gated by pytest", extra={"event": "startup", "enabled": False, "reason": "pytest"})
+    try:
+        yield
+    finally:
+        if worker_task:
+            worker_task.cancel()
+            try:
+                await worker_task
+            except asyncio.CancelledError:
+                pass
+            LOGGER.info("worker stopped", extra={"event": "shutdown"})
+```
+
+Minimal test (httpx + optional LifespanManager):
+
+```python
+import os, pytest
+import httpx
+
+os.environ["PYTEST_CURRENT_TEST"] = "1"
+
+@pytest.mark.anyio
+async def test_worker_gated(app):
+    async with httpx.AsyncClient(app=app, base_url="http://test") as client:
+        resp = await client.get("/worker/status")
+        assert resp.status_code == 200
+        assert resp.json()["running"] is False
+```
+
+## Import fallback patterns in tests
+
+Some services add import fallbacks in `tests/conftest.py` to ensure local imports work when running from the service folder or repo root.
+
+Example snippet used in services:
+
+```python
+import sys, os
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+SERVICE_ROOT = ROOT
+REPO_ROOT = os.path.abspath(os.path.join(ROOT, "..", ".."))
+for p in (SERVICE_ROOT, REPO_ROOT):
+    if p not in sys.path:
+        sys.path.insert(0, p)
+```
+
+This avoids "Module not found" when running `pytest` from different working directories.
+
 ## Optional: Enable Gateway OIDC Smoke CI
 
 - This job requires Kong Enterprise/Konnect (OIDC plugin).

@@ -23,6 +23,18 @@ Run PowerShell as Administrator.
 powershell -NoProfile -ExecutionPolicy Bypass -File "C:\Users\UC\AndroidStudioProjects\SystemUpdate\systemupdate-web\scripts\windows\setup-dev.ps1"
 ```
 
+## Notes on testing behavior (pytest gating)
+
+- Python services use FastAPI lifespan with background workers gated during pytest.
+- When running tests, services detect `PYTEST_CURRENT_TEST` and skip starting long-running background tasks.
+- A `/worker/status` endpoint returns `{"running": false}` while tests run.
+- See `docs/TEST_GUIDE.md` → "Pytest gating for background workers" for examples and a minimal test snippet.
+
+## Docker/Testcontainers on Windows
+
+- Some integration tests (Kafka, DB) require Docker. Ensure Docker Desktop is running first.
+- To skip docker-dependent tests on environments without Docker, set `DOCKER_AVAILABLE=0` (see `docs/TEST_GUIDE.md`).
+
 - From the repo root `systemupdate-web/` (relative path):
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/setup-dev.ps1
