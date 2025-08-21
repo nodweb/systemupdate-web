@@ -1,4 +1,7 @@
 import asyncio
+import logging
+import os
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Dict
 
@@ -8,6 +11,8 @@ from pydantic import BaseModel
 from .policy import allow_ws_connect
 from .security import get_claims as _sec_get_claims
 from .security import validate_token as _sec_validate_token
+
+logger = logging.getLogger("ws-hub")
 
 app = FastAPI(title="SystemUpdate WS Hub", version="0.1.0")
 
@@ -65,6 +70,114 @@ class Connection:
 
 
 connections: Dict[str, Connection] = {}
+
+# Background worker controls
+WS_HUB_WORKER_ENABLED = os.getenv("WS_HUB_WORKER_ENABLED", "true").lower() in {
+    "1",
+    "true",
+    "yes",
+}
+_worker_task: asyncio.Task | None = None
+
+
+@app.get("/worker/status")
+def worker_status():
+    return {"running": bool(_worker_task is not None and not _worker_task.done())}
+
+
+def _in_pytest() -> bool:
+    return bool(os.environ.get("PYTEST_CURRENT_TEST"))
+
+
+async def _worker_loop():
+    try:
+        while True:
+            # Background maintenance placeholder (e.g., prune dead connections)
+            await asyncio.sleep(60.0)
+    except asyncio.CancelledError:
+        raise
+
+
+async def _start_worker():
+    global _worker_task
+    if not WS_HUB_WORKER_ENABLED:
+        try:
+            logger.info(
+                "Service lifecycle event",
+                extra={
+                    "service": "ws-hub",
+                    "event": "startup",
+                    "component": "worker",
+                    "enabled": False,
+                    "reason": "WS_HUB_WORKER_ENABLED=false",
+                },
+            )
+        except Exception:
+            pass
+        return
+    if _in_pytest():
+        try:
+            logger.info(
+                "Service lifecycle event",
+                extra={
+                    "service": "ws-hub",
+                    "event": "startup",
+                    "component": "worker",
+                    "enabled": False,
+                    "reason": "pytest_gating_worker",
+                },
+            )
+        except Exception:
+            pass
+        return
+    _worker_task = asyncio.create_task(_worker_loop())
+    try:
+        logger.info(
+            "Service lifecycle event",
+            extra={
+                "service": "ws-hub",
+                "event": "startup",
+                "component": "worker",
+                "enabled": True,
+            },
+        )
+    except Exception:
+        pass
+
+
+async def _stop_worker():
+    global _worker_task
+    if _worker_task is not None:
+        _worker_task.cancel()
+        try:
+            await _worker_task
+        except Exception:
+            pass
+        finally:
+            _worker_task = None
+        try:
+            logger.info(
+                "Service lifecycle event",
+                extra={
+                    "service": "ws-hub",
+                    "event": "shutdown",
+                    "component": "worker",
+                },
+            )
+        except Exception:
+            pass
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    await _start_worker()
+    try:
+        yield
+    finally:
+        await _stop_worker()
+
+
+app.router.lifespan_context = lifespan
 
 
 def validate_token(token: str) -> bool:
