@@ -11,7 +11,7 @@ Updated: 2025-08-21
 - [x] Lifespan migration: notification-service (PR #8)
 - [x] Lifespan migration: device-service (PR #9)
 - [x] Lifespan migration: ws-hub (PR #10)
-- [ ] Lifespan migration: auth-service
+- [x] Lifespan migration: auth-service (PR #11)
 
 ### CI/Testing Stability
 
