@@ -2,6 +2,9 @@ name: testcontainers-integration
 
 on:
   workflow_dispatch:
+  schedule:
+    # Nightly at 07:00 UTC (~midnight US PT depending on DST)
+    - cron: '0 7 * * *'
 
 jobs:
   integration:

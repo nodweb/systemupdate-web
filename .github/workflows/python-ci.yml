@@ -50,4 +50,4 @@ jobs:
       - name: Run tests
         env:
           PYTHONPATH: '.'
-        run: pytest -q
+        run: pytest -q -m "not docker"
