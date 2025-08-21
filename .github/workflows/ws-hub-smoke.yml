@@ -1,0 +1,65 @@
+name: WebSocket Hub Smoke Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - 'systemupdate-web/services/ws-hub/**'
+      - '.github/workflows/ws-hub-smoke.yml'
+
+jobs:
+  ws-smoke:
+    runs-on: ubuntu-latest
+    if: ${{ secrets.WS_HUB_SMOKE_TOKEN != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Start minimal stack
+        run: |
+          cd systemupdate-web
+          docker compose up -d postgres redis ws-hub gateway
+
+      - name: Wait for health
+        run: |
+          cd systemupdate-web
+          # wait up to 90s for ws-hub to be healthy or running
+          timeout 90 bash -c 'until docker compose ps | grep -E "(healthy|running).*ws-hub"; do sleep 2; done'
+
+      - name: WebSocket smoke test
+        env:
+          WS_HUB_SMOKE_TOKEN: ${{ secrets.WS_HUB_SMOKE_TOKEN }}
+          WS_HUB_SMOKE_CLIENT_ID: ${{ vars.WS_HUB_SMOKE_CLIENT_ID }}
+        run: |
+          python -m pip install --upgrade pip
+          pip install websocket-client
+          python - << 'PY'
+          import os, json, time
+          from websocket import WebSocket
+
+          token = os.environ.get('WS_HUB_SMOKE_TOKEN')
+          if not token:
+              raise SystemExit('Missing WS_HUB_SMOKE_TOKEN')
+
+          ws = WebSocket()
+          ws.connect('ws://localhost:8000/ws/hub',
+                     header=[f'Authorization: Bearer {token}'])
+
+          ws.send(json.dumps({'type': 'ping', 'timestamp': int(time.time())}))
+          resp = ws.recv()
+          data = json.loads(resp)
+          assert data.get('type') == 'pong', f'Unexpected message: {data}'
+          print('WebSocket smoke test passed!')
+          ws.close()
+          PY
+
+      - name: Teardown
+        if: always()
+        run: |
+          cd systemupdate-web
+          docker compose down -v
