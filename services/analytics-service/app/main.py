@@ -102,6 +102,28 @@ except Exception:
 
 app = FastAPI(title="Analytics Service", version="0.3.0")
 
+# Optional rate limiting (no-op if slowapi not installed)
+try:
+    from slowapi import Limiter  # type: ignore
+    from slowapi.errors import RateLimitExceeded  # type: ignore
+    from slowapi.util import get_remote_address  # type: ignore
+    from slowapi.middleware import SlowAPIMiddleware  # type: ignore
+    from slowapi import _rate_limit_exceeded_handler  # type: ignore
+
+    limiter = Limiter(key_func=get_remote_address)
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    app.add_middleware(SlowAPIMiddleware)
+
+    def _limit(rule: str):
+        return limiter.limit(rule)
+except Exception:  # pragma: no cover - optional dependency
+    def _limit(_rule: str):  # type: ignore
+        def _decor(fn):
+            return fn
+
+        return _decor
+
 # OpenTelemetry initialization (no-op if not configured via env)
 try:
     from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
@@ -153,6 +175,7 @@ async def demo_e2e(device_id: str = "dev-001", request: Request = None):
 
 # ---------------- Minimal batch/stream endpoints ----------------
 @app.post("/batch/run", dependencies=DEPS_AUTH)
+@_limit("10/minute")
 async def run_batch(kind: str = "daily", request: Request = None):
     # placeholder batch job
     with tracer.start_as_current_span("analytics.batch"):
@@ -165,6 +188,7 @@ async def run_batch(kind: str = "daily", request: Request = None):
 
 
 @app.post("/stream/start", dependencies=DEPS_AUTH)
+@_limit("5/minute")
 async def start_stream(topics: Optional[List[str]] = None, request: Request = None):
     # placeholder hook to indicate consumer is running via background task
     await _check_auth(request.headers if request else {})
@@ -187,17 +211,30 @@ try:
     LOGGER = get_structured_logger("analytics-service")
 except Exception:
     pass
-KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "kafka:9092")
-CONSUME_ENABLED = os.getenv("ANALYTICS_CONSUME_ENABLED", "false").lower() in {
-    "1",
-    "true",
-    "yes",
-}
-CONSUME_TOPICS = [
-    t.strip()
-    for t in os.getenv("ANALYTICS_CONSUME_TOPICS", "device.ingest.raw").split(",")
-    if t.strip()
-]
+
+# Typed settings (validation) with safe fallback
+try:
+    from app.config import settings  # type: ignore
+except Exception:
+    class _Settings:
+        KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP", "kafka:9092")
+        ANALYTICS_CONSUME_ENABLED = (
+            os.getenv("ANALYTICS_CONSUME_ENABLED", "false").lower()
+            in {"1", "true", "yes"}
+        )
+        KAFKA_TOPICS = [
+            t.strip()
+            for t in os.getenv(
+                "ANALYTICS_CONSUME_TOPICS", "device.ingest.raw"
+            ).split(",")
+            if t.strip()
+        ]
+
+    settings = _Settings()  # type: ignore
+
+KAFKA_BOOTSTRAP = getattr(settings, "KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
+CONSUME_ENABLED = bool(getattr(settings, "ANALYTICS_CONSUME_ENABLED", False))
+CONSUME_TOPICS = list(getattr(settings, "KAFKA_TOPICS", ["device.ingest.raw"]))
 _state: Dict[str, Any] = {}
 
 try:
