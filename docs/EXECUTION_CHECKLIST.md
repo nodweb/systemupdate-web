@@ -7,9 +7,9 @@ Updated: 2025-08-21
 ### Deprecation Fixes
 
 - [x] Lifespan migration: command-service (PR #6)
-- [ ] Lifespan migration: data-ingest-service
-- [ ] Lifespan migration: notification-service
-- [ ] Lifespan migration: device-service
+- [x] Lifespan migration: data-ingest-service (PR #7)
+- [x] Lifespan migration: notification-service (PR #8)
+- [x] Lifespan migration: device-service (PR #9)
 - [ ] Lifespan migration: ws-hub
 - [ ] Lifespan migration: auth-service
 
