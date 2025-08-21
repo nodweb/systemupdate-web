@@ -1,7 +1,8 @@
-import os
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException, status
+from libs.shared_python.exceptions import ServiceError
+from app.config import settings
 from pydantic import BaseModel
 
 from .otel import init_tracing
@@ -10,8 +11,30 @@ from .security import validate_jwt
 
 app = FastAPI(title="SystemUpdate Auth Service", version="0.1.0")
 
+# Optional rate limiting (no-op if slowapi is unavailable)
+try:
+    from slowapi import Limiter  # type: ignore
+    from slowapi.errors import RateLimitExceeded  # type: ignore
+    from slowapi.util import get_remote_address  # type: ignore
+    from slowapi.middleware import SlowAPIMiddleware  # type: ignore
+    from slowapi import _rate_limit_exceeded_handler  # type: ignore
+
+    limiter = Limiter(key_func=get_remote_address)
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    app.add_middleware(SlowAPIMiddleware)
+
+    def _limit(rule: str):
+        return limiter.limit(rule)
+except Exception:  # pragma: no cover - optional dependency
+    def _limit(_rule: str):  # type: ignore
+        def _decor(fn):
+            return fn
+
+        return _decor
+
 # Initialize OpenTelemetry tracing if configured via env
-init_tracing(service_name=os.getenv("OTEL_SERVICE_NAME", "auth-service"))
+init_tracing(service_name=getattr(settings, "SERVICE_NAME", "auth-service"))
 
 
 class HealthResponse(BaseModel):
@@ -36,6 +59,7 @@ class TokenIntrospectResponse(BaseModel):
 
 
 @app.post("/api/auth/introspect", response_model=TokenIntrospectResponse, tags=["auth"])
+@_limit("300/minute")
 async def introspect(req: TokenIntrospectRequest) -> TokenIntrospectResponse:
     if not req.token:
         return TokenIntrospectResponse(active=False)
@@ -66,6 +90,7 @@ class AuthorizeResponse(BaseModel):
 
 
 @app.post("/api/auth/authorize", response_model=AuthorizeResponse, tags=["auth"])
+@_limit("300/minute")
 async def authorize(req: AuthorizeRequest) -> AuthorizeResponse:
     try:
         claims = validate_jwt(req.token)
@@ -75,7 +100,5 @@ async def authorize(req: AuthorizeRequest) -> AuthorizeResponse:
 
     allow, reason = authorize_action(claims, req.action, req.resource)
     if not allow:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail=reason or "forbidden"
-        )
+        raise ServiceError(403, "FORBIDDEN", reason or "forbidden")
     return AuthorizeResponse(allow=True, reason=reason)

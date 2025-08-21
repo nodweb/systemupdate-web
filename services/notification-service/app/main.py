@@ -5,6 +5,8 @@ from collections import defaultdict, deque
 from typing import Deque, Dict, Tuple
 
 from fastapi import Depends, FastAPI, HTTPException, Request, status
+from libs.shared_python.exceptions import ServiceError
+from app.config import settings
 from fastapi.responses import JSONResponse
 
 # Safe import for shared authorize client despite hyphen in directory name
@@ -84,12 +86,51 @@ if (
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("notification-service")
+# Prefer structured logger from shared libs, but don't fail if unavailable
+try:
+    from libs.shared_python.logging_utils import \
+      get_structured_logger  # type: ignore
+
+    logger = get_structured_logger("notification-service")
+except Exception:
+    pass
 
 app = FastAPI(title="notification-service", version="0.3.0")
 
+# Optional rate limiting (no-op if slowapi is unavailable)
+try:
+    from slowapi import Limiter  # type: ignore
+    from slowapi.errors import RateLimitExceeded  # type: ignore
+    from slowapi.util import get_remote_address  # type: ignore
+    from slowapi.middleware import SlowAPIMiddleware  # type: ignore
+    from slowapi import _rate_limit_exceeded_handler  # type: ignore
+
+    limiter = Limiter(key_func=get_remote_address)
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    app.add_middleware(SlowAPIMiddleware)
+
+    def _limit(rule: str):
+        return limiter.limit(rule)
+except Exception:  # pragma: no cover - optional dependency
+    def _limit(_rule: str):  # type: ignore
+        def _decor(fn):
+            return fn
+
+        return _decor
+
+# Security headers middleware (no-op if helper missing)
+try:
+    from libs.shared_python.security.headers import \
+      add_security_headers  # type: ignore
+
+    add_security_headers(app)
+except Exception:
+    pass
+
 # Throttling config (in-memory sliding window per (alertname, source))
-THROTTLE_WINDOW_SECONDS = int(os.getenv("NOTIF_THROTTLE_WINDOW_SECONDS", "60"))
-THROTTLE_LIMIT = int(os.getenv("NOTIF_THROTTLE_LIMIT", "20"))
+THROTTLE_WINDOW_SECONDS = int(getattr(settings, "NOTIF_THROTTLE_WINDOW_SECONDS", 60))
+THROTTLE_LIMIT = int(getattr(settings, "NOTIF_THROTTLE_LIMIT", 20))
 _buckets: Dict[Tuple[str, str], Deque[float]] = defaultdict(deque)
 
 
@@ -119,6 +160,7 @@ def health():
 
 
 @app.post("/alerts", dependencies=DEPS_AUTH)
+@_limit("60/minute")
 async def receive_alerts(request: Request):
     # Optional auth/authz
     token = await _check_auth(request.headers)
@@ -184,21 +226,15 @@ async def _check_auth(headers: Dict[str, str]) -> str | None:
         return None
     token = await _bearer_token(headers)
     if not token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="missing bearer token"
-        )
+        raise ServiceError(401, "UNAUTHORIZED", "missing bearer token")
     try:
         data = await auth_introspect(token, url=AUTH_INTROSPECT_URL)
         if not data.get("active"):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, detail="inactive token"
-            )
+            raise ServiceError(401, "UNAUTHORIZED", "inactive token")
     except HTTPException:
         raise
     except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="auth failure"
-        )
+        raise ServiceError(401, "UNAUTHORIZED", "auth failure")
     return token
 
 
@@ -206,17 +242,13 @@ async def _check_authorize(token: str | None, action: str, resource: str) -> Non
     if not AUTHZ_REQUIRED:
         return
     if not token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="missing bearer token"
-        )
+        raise ServiceError(401, "UNAUTHORIZED", "missing bearer token")
     try:
         data = await auth_authorize(
             token, action=action, resource=resource, url=AUTH_AUTHORIZE_URL
         )
         if not data.get("allow"):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, detail="forbidden"
-            )
+            raise ServiceError(403, "FORBIDDEN", "forbidden")
         # Optional OPA enforcement
         if opa_enforce is not None:
             allowed = await opa_enforce(
@@ -228,12 +260,8 @@ async def _check_authorize(token: str | None, action: str, resource: str) -> Non
                 required=None,
             )
             if not allowed:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN, detail="forbidden"
-                )
+                raise ServiceError(403, "FORBIDDEN", "forbidden")
     except HTTPException:
         raise
     except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="authz failure"
-        )
+        raise ServiceError(403, "FORBIDDEN", "authz failure")

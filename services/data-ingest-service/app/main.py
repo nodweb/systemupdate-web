@@ -6,6 +6,8 @@ from typing import Any, Dict, List, Optional
 import httpx
 from fastapi import (FastAPI, HTTPException, Request, WebSocket,
                      WebSocketDisconnect)
+from libs.shared_python.exceptions import ServiceError
+from app.config import settings
 from pydantic import BaseModel, Field, ValidationError
 
 try:
@@ -14,6 +16,28 @@ except Exception:  # pragma: no cover - aiokafka missing in some envs
     AIOKafkaProducer = None  # type: ignore
 
 app = FastAPI(title="Data Ingest Service", version="0.3.0")
+
+# Optional rate limiting (no-op if slowapi is unavailable)
+try:
+    from slowapi import Limiter  # type: ignore
+    from slowapi.errors import RateLimitExceeded  # type: ignore
+    from slowapi.util import get_remote_address  # type: ignore
+    from slowapi.middleware import SlowAPIMiddleware  # type: ignore
+    from slowapi import _rate_limit_exceeded_handler  # type: ignore
+
+    limiter = Limiter(key_func=get_remote_address)
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    app.add_middleware(SlowAPIMiddleware)
+
+    def _limit(rule: str):
+        return limiter.limit(rule)
+except Exception:  # pragma: no cover - optional dependency
+    def _limit(_rule: str):  # type: ignore
+        def _decor(fn):
+            return fn
+
+        return _decor
 
 # OpenTelemetry initialization (no-op if not configured via env)
 try:
@@ -37,21 +61,22 @@ class IngestBody(BaseModel):
 
 
 producer = None
-topic_default = os.getenv("INGEST_TOPIC", "device.ingest.raw")
-bootstrap = os.getenv("KAFKA_BOOTSTRAP", "kafka:9092")
+topic_default = getattr(settings, "INGEST_TOPIC", "device.ingest.raw")
+bootstrap = getattr(settings, "KAFKA_BOOTSTRAP", "kafka:9092")
 
 # Validation controls
+_allowed_kinds_str = getattr(settings, "INGEST_ALLOWED_KINDS", None)
 ALLOWED_KINDS: Optional[List[str]] = (
-    os.getenv("INGEST_ALLOWED_KINDS").split(",")
-    if os.getenv("INGEST_ALLOWED_KINDS")
+    [s for s in _allowed_kinds_str.split(",") if s]
+    if _allowed_kinds_str
     else None
 )
-MAX_BYTES: int = int(os.getenv("INGEST_MAX_BYTES", "524288"))  # 512 KiB default
+MAX_BYTES: int = int(getattr(settings, "INGEST_MAX_BYTES", 524288))  # 512 KiB default
 
 # Auth controls (optional)
-AUTH_REQUIRED = os.getenv("AUTH_REQUIRED", "false").lower() in {"1", "true", "yes"}
-AUTH_INTROSPECT_URL = os.getenv(
-    "AUTH_INTROSPECT_URL", "http://auth-service:8001/api/auth/introspect"
+AUTH_REQUIRED = bool(getattr(settings, "AUTH_REQUIRED", False))
+AUTH_INTROSPECT_URL = getattr(
+    settings, "AUTH_INTROSPECT_URL", "http://auth-service:8001/api/auth/introspect"
 )
 
 
@@ -88,7 +113,7 @@ async def _check_auth(headers: Dict[str, str]) -> None:
         return
     auth = headers.get("authorization") or headers.get("Authorization")
     if not auth or not auth.lower().startswith("bearer "):
-        raise HTTPException(status_code=401, detail="missing bearer token")
+        raise ServiceError(401, "UNAUTHORIZED", "missing bearer token")
     token = auth.split(" ", 1)[1]
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
@@ -96,21 +121,22 @@ async def _check_auth(headers: Dict[str, str]) -> None:
             r.raise_for_status()
             data = r.json()
             if not data.get("active"):
-                raise HTTPException(status_code=401, detail="inactive token")
+                raise ServiceError(401, "UNAUTHORIZED", "inactive token")
     except HTTPException:
         raise
     except Exception:
         # Fail closed when auth is required
-        raise HTTPException(status_code=401, detail="auth failure")
+        raise ServiceError(401, "UNAUTHORIZED", "auth failure")
 
 
 @app.post("/ingest")
+@_limit("120/minute")
 async def ingest(body: IngestBody, request: Request):
     # Auth (optional)
     await _check_auth(request.headers)  # may raise 401
     # Validate kind if list provided
     if ALLOWED_KINDS is not None and body.kind not in ALLOWED_KINDS:
-        raise HTTPException(status_code=422, detail=f"kind '{body.kind}' not allowed")
+        raise ServiceError(422, "VALIDATION_ERROR", f"kind '{body.kind}' not allowed")
     payload = {
         "device_id": body.device_id,
         "kind": body.kind,
@@ -118,7 +144,7 @@ async def ingest(body: IngestBody, request: Request):
     }
     encoded = json.dumps(payload, separators=(",", ":")).encode("utf-8")
     if len(encoded) > MAX_BYTES:
-        raise HTTPException(status_code=413, detail="payload too large")
+        raise ServiceError(413, "PAYLOAD_TOO_LARGE", "payload too large")
     sent = False
     if producer is not None:
         try:

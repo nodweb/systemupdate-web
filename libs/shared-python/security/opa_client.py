@@ -8,8 +8,13 @@ OPA_URL = os.getenv("OPA_URL", "http://localhost:8181/v1/data/systemupdate/allow
 OPA_TIMEOUT = float(os.getenv("OPA_TIMEOUT", "3.0"))
 
 
-async def evaluate(token: str | None, action: str, resource: str, subject: Dict[str, Any] | None = None,
-                   url: str | None = None) -> Dict[str, Any]:
+async def evaluate(
+    token: str | None,
+    action: str,
+    resource: str,
+    subject: Dict[str, Any] | None = None,
+    url: str | None = None,
+) -> Dict[str, Any]:
     """
     Call an OPA data endpoint and return the raw decision.
 
@@ -33,8 +38,14 @@ async def evaluate(token: str | None, action: str, resource: str, subject: Dict[
         return r.json()
 
 
-async def enforce(token: str | None, action: str, resource: str, subject: Dict[str, Any] | None = None,
-                  url: str | None = None, required: bool | None = None) -> bool:
+async def enforce(
+    token: str | None,
+    action: str,
+    resource: str,
+    subject: Dict[str, Any] | None = None,
+    url: str | None = None,
+    required: bool | None = None,
+) -> bool:
     """
     Optional policy enforcement with allow-all default when disabled.
 

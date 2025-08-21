@@ -4,6 +4,8 @@ from typing import Dict, List, Optional
 from uuid import uuid4
 
 from fastapi import Depends, FastAPI, HTTPException, Request, status
+from libs.shared_python.exceptions import ServiceError
+from app.config import settings
 from pydantic import BaseModel, Field
 
 # Safe import for shared authorize client despite hyphen in directory name
@@ -102,6 +104,28 @@ except Exception:
 
 app = FastAPI(title="SystemUpdate Device Service", version="0.2.0")
 
+# Optional rate limiting (no-op if slowapi is unavailable)
+try:
+    from slowapi import Limiter  # type: ignore
+    from slowapi.errors import RateLimitExceeded  # type: ignore
+    from slowapi.util import get_remote_address  # type: ignore
+    from slowapi.middleware import SlowAPIMiddleware  # type: ignore
+    from slowapi import _rate_limit_exceeded_handler  # type: ignore
+
+    limiter = Limiter(key_func=get_remote_address)
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    app.add_middleware(SlowAPIMiddleware)
+
+    def _limit(rule: str):
+        return limiter.limit(rule)
+except Exception:  # pragma: no cover - optional dependency
+    def _limit(_rule: str):  # type: ignore
+        def _decor(fn):
+            return fn
+
+        return _decor
+
 # OpenTelemetry initialization (no-op if not configured via env)
 try:
     from .otel import init_tracing
@@ -134,13 +158,13 @@ class Device(DeviceCreate):
 _db: Dict[str, Device] = {}
 
 
-AUTH_REQUIRED = os.getenv("AUTH_REQUIRED", "false").lower() in {"1", "true", "yes"}
-AUTHZ_REQUIRED = os.getenv("AUTHZ_REQUIRED", "false").lower() in {"1", "true", "yes"}
-AUTH_INTROSPECT_URL = os.getenv(
-    "AUTH_INTROSPECT_URL", "http://auth-service:8001/api/auth/introspect"
+AUTH_REQUIRED = bool(getattr(settings, "AUTH_REQUIRED", False))
+AUTHZ_REQUIRED = bool(getattr(settings, "AUTHZ_REQUIRED", False))
+AUTH_INTROSPECT_URL = getattr(
+    settings, "AUTH_INTROSPECT_URL", "http://auth-service:8001/api/auth/introspect"
 )
-AUTH_AUTHORIZE_URL = os.getenv(
-    "AUTH_AUTHORIZE_URL", "http://auth-service:8001/api/auth/authorize"
+AUTH_AUTHORIZE_URL = getattr(
+    settings, "AUTH_AUTHORIZE_URL", "http://auth-service:8001/api/auth/authorize"
 )
 
 
@@ -156,21 +180,15 @@ async def _check_auth(headers: Dict[str, str]) -> Optional[str]:
         return None
     token = await _bearer_token(headers)
     if not token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="missing bearer token"
-        )
+        raise ServiceError(401, "UNAUTHORIZED", "missing bearer token")
     try:
         data = await auth_introspect(token, url=AUTH_INTROSPECT_URL)
         if not data.get("active"):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, detail="inactive token"
-            )
+            raise ServiceError(401, "UNAUTHORIZED", "inactive token")
     except HTTPException:
         raise
     except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="auth failure"
-        )
+        raise ServiceError(401, "UNAUTHORIZED", "auth failure")
     return token
 
 
@@ -178,17 +196,13 @@ async def _check_authorize(token: Optional[str], action: str, resource: str) -> 
     if not AUTHZ_REQUIRED:
         return
     if not token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="missing bearer token"
-        )
+        raise ServiceError(401, "UNAUTHORIZED", "missing bearer token")
     try:
         data = await auth_authorize(
             token, action=action, resource=resource, url=AUTH_AUTHORIZE_URL
         )
         if not data.get("allow"):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, detail="forbidden"
-            )
+            raise ServiceError(403, "FORBIDDEN", "forbidden")
         # Optional additional OPA enforcement
         if opa_enforce is not None:
             allowed = await opa_enforce(
@@ -200,20 +214,17 @@ async def _check_authorize(token: Optional[str], action: str, resource: str) -> 
                 required=None,
             )
             if not allowed:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN, detail="forbidden"
-                )
+                raise ServiceError(403, "FORBIDDEN", "forbidden")
     except HTTPException:
         raise
     except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="authz failure"
-        )
+        raise ServiceError(403, "FORBIDDEN", "authz failure")
 
 
 @app.post(
     "/api/devices", response_model=Device, status_code=201, dependencies=DEPS_AUTH
 )
+@_limit("30/minute")
 async def create_device(payload: DeviceCreate, request: Request) -> Device:
     token = await _check_auth(request.headers)
     await _check_authorize(token, action="devices:create", resource="device")
@@ -229,16 +240,18 @@ async def create_device(payload: DeviceCreate, request: Request) -> Device:
     responses={404: {"description": "Not Found"}},
     dependencies=DEPS_AUTH,
 )
+@_limit("120/minute")
 async def get_device(dev_id: str, request: Request) -> Device:
     token = await _check_auth(request.headers)
     await _check_authorize(token, action="devices:read", resource=dev_id)
     dev = _db.get(dev_id)
     if not dev:
-        raise HTTPException(status_code=404, detail="device not found")
+        raise ServiceError(404, "NOT_FOUND", "device not found")
     return dev
 
 
 @app.get("/api/devices", response_model=List[Device], dependencies=DEPS_AUTH)
+@_limit("60/minute")
 async def list_devices(request: Request) -> List[Device]:
     token = await _check_auth(request.headers)
     await _check_authorize(token, action="devices:read", resource="device")
@@ -256,12 +269,13 @@ class DeviceUpdate(BaseModel):
     responses={404: {"description": "Not Found"}},
     dependencies=DEPS_AUTH,
 )
+@_limit("30/minute")
 async def update_device(dev_id: str, payload: DeviceUpdate, request: Request) -> Device:
     token = await _check_auth(request.headers)
     await _check_authorize(token, action="devices:update", resource=dev_id)
     dev = _db.get(dev_id)
     if not dev:
-        raise HTTPException(status_code=404, detail="device not found")
+        raise ServiceError(404, "NOT_FOUND", "device not found")
     if payload.name is not None:
         dev.name = payload.name
     if payload.tags is not None:
@@ -276,13 +290,14 @@ async def update_device(dev_id: str, payload: DeviceUpdate, request: Request) ->
     responses={404: {"description": "Not Found"}},
     dependencies=DEPS_AUTH,
 )
+@_limit("30/minute")
 async def delete_device(dev_id: str, request: Request):
     token = await _check_auth(request.headers)
     await _check_authorize(token, action="devices:delete", resource=dev_id)
     if dev_id in _db:
         _db.pop(dev_id)
         return
-    raise HTTPException(status_code=404, detail="device not found")
+    raise ServiceError(404, "NOT_FOUND", "device not found")
 
 
 class PresenceUpdate(BaseModel):
@@ -302,7 +317,7 @@ async def update_presence(
     await _check_authorize(token, action="presence:update", resource=dev_id)
     dev = _db.get(dev_id)
     if not dev:
-        raise HTTPException(status_code=404, detail="device not found")
+        raise ServiceError(404, "NOT_FOUND", "device not found")
     dev.online = payload.online
     _db[dev_id] = dev
     return dev
