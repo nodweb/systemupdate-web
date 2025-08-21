@@ -1,4 +1,7 @@
+import asyncio
+import logging
 import os
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 from uuid import uuid4
@@ -100,6 +103,8 @@ except Exception:
 
     _tracer = _Tracer()
 
+logger = logging.getLogger("device-service")
+
 app = FastAPI(title="SystemUpdate Device Service", version="0.2.0")
 
 # OpenTelemetry initialization (no-op if not configured via env)
@@ -132,6 +137,14 @@ class Device(DeviceCreate):
 
 
 _db: Dict[str, Device] = {}
+
+# Background worker controls
+DEVICE_WORKER_ENABLED = os.getenv("DEVICE_WORKER_ENABLED", "true").lower() in {
+    "1",
+    "true",
+    "yes",
+}
+_worker_task: asyncio.Task | None = None
 
 
 AUTH_REQUIRED = os.getenv("AUTH_REQUIRED", "false").lower() in {"1", "true", "yes"}
@@ -322,3 +335,103 @@ async def demo_leaf(device_id: str = "dev-001"):
             )
         dev = _db[device_id]
         return {"device_id": dev.id, "name": dev.name, "online": dev.online, "ts": now}
+
+
+@app.get("/worker/status")
+def worker_status():
+    return {"running": bool(_worker_task is not None and not _worker_task.done())}
+
+
+# ---------------- Lifespan management ----------------
+def _in_pytest() -> bool:
+    return bool(os.environ.get("PYTEST_CURRENT_TEST"))
+
+
+async def _worker_loop():
+    try:
+        while True:
+            await asyncio.sleep(60.0)
+    except asyncio.CancelledError:
+        raise
+
+
+async def _start_worker():
+    global _worker_task
+    if not DEVICE_WORKER_ENABLED:
+        try:
+            logger.info(
+                "Service lifecycle event",
+                extra={
+                    "service": "device-service",
+                    "event": "startup",
+                    "component": "worker",
+                    "enabled": False,
+                    "reason": "DEVICE_WORKER_ENABLED=false",
+                },
+            )
+        except Exception:
+            pass
+        return
+    if _in_pytest():
+        try:
+            logger.info(
+                "Service lifecycle event",
+                extra={
+                    "service": "device-service",
+                    "event": "startup",
+                    "component": "worker",
+                    "enabled": False,
+                    "reason": "pytest_gating_worker",
+                },
+            )
+        except Exception:
+            pass
+        return
+    _worker_task = asyncio.create_task(_worker_loop())
+    try:
+        logger.info(
+            "Service lifecycle event",
+            extra={
+                "service": "device-service",
+                "event": "startup",
+                "component": "worker",
+                "enabled": True,
+            },
+        )
+    except Exception:
+        pass
+
+
+async def _stop_worker():
+    global _worker_task
+    if _worker_task is not None:
+        _worker_task.cancel()
+        try:
+            await _worker_task
+        except Exception:
+            pass
+        finally:
+            _worker_task = None
+        try:
+            logger.info(
+                "Service lifecycle event",
+                extra={
+                    "service": "device-service",
+                    "event": "shutdown",
+                    "component": "worker",
+                },
+            )
+        except Exception:
+            pass
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    await _start_worker()
+    try:
+        yield
+    finally:
+        await _stop_worker()
+
+
+app.router.lifespan_context = lifespan
