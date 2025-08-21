@@ -5,6 +5,7 @@ from collections import defaultdict, deque
 from typing import Deque, Dict, Tuple
 
 from fastapi import Depends, FastAPI, HTTPException, Request, status
+from app.config import settings
 from fastapi.responses import JSONResponse
 
 # Safe import for shared authorize client despite hyphen in directory name
@@ -95,6 +96,28 @@ except Exception:
 
 app = FastAPI(title="notification-service", version="0.3.0")
 
+# Optional rate limiting (no-op if slowapi is unavailable)
+try:
+    from slowapi import Limiter  # type: ignore
+    from slowapi.errors import RateLimitExceeded  # type: ignore
+    from slowapi.util import get_remote_address  # type: ignore
+    from slowapi.middleware import SlowAPIMiddleware  # type: ignore
+    from slowapi import _rate_limit_exceeded_handler  # type: ignore
+
+    limiter = Limiter(key_func=get_remote_address)
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    app.add_middleware(SlowAPIMiddleware)
+
+    def _limit(rule: str):
+        return limiter.limit(rule)
+except Exception:  # pragma: no cover - optional dependency
+    def _limit(_rule: str):  # type: ignore
+        def _decor(fn):
+            return fn
+
+        return _decor
+
 # Security headers middleware (no-op if helper missing)
 try:
     from libs.shared_python.security.headers import \
@@ -105,8 +128,8 @@ except Exception:
     pass
 
 # Throttling config (in-memory sliding window per (alertname, source))
-THROTTLE_WINDOW_SECONDS = int(os.getenv("NOTIF_THROTTLE_WINDOW_SECONDS", "60"))
-THROTTLE_LIMIT = int(os.getenv("NOTIF_THROTTLE_LIMIT", "20"))
+THROTTLE_WINDOW_SECONDS = int(getattr(settings, "NOTIF_THROTTLE_WINDOW_SECONDS", 60))
+THROTTLE_LIMIT = int(getattr(settings, "NOTIF_THROTTLE_LIMIT", 20))
 _buckets: Dict[Tuple[str, str], Deque[float]] = defaultdict(deque)
 
 
@@ -136,6 +159,7 @@ def health():
 
 
 @app.post("/alerts", dependencies=DEPS_AUTH)
+@_limit("60/minute")
 async def receive_alerts(request: Request):
     # Optional auth/authz
     token = await _check_auth(request.headers)
