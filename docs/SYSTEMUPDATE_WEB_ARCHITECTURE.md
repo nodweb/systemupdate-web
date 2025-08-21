@@ -270,3 +270,119 @@ systemupdate-web/
 3) شروع `command-service` + Outbox + قرارداد رویدادها
 4) اسکلت Frontend و اتصال به auth/device/ws-hub
 5) آماده‌سازی VPS برای تست‌های واقعی (زمان مناسب)
+
+## 19) قرارداد Android ↔ Web (HTTP/WS)
+
+این بخش قراردادهای حداقلی بین کلاینت اندروید و سرویس‌های وب را تعریف می‌کند. تمام مسیرهای HTTP از طریق Gateway با پیشوند `/api/*` در دسترس هستند. احراز هویت با JWT (Bearer) انجام می‌شود؛ در WS نیز توکن در هدر Authorization ارسال می‌گردد.
+
+### 19.1) سرتیترها و احراز هویت (Headers & Auth)
+- الزامی: `Authorization: Bearer <JWT>` (امضاشده توسط Keycloak؛ JWKS در Gateway)
+- الزامی: `Content-Type: application/json`
+- رهگیری: `X-Request-ID` (اختیاری اما توصیه‌شده؛ اگر ارسال نشود، Gateway مقداردهی می‌کند)
+
+### 19.2) قالب خطا (Standard Error JSON)
+```json
+{
+  "error": {
+    "code": "<string>",
+    "message": "<human_readable>",
+    "details": { "field": "reason" },
+    "request_id": "<uuid>"
+  }
+}
+```
+
+### 19.3) ثبت دستگاه (Device Registration)
+- روش: POST `/api/devices/register`
+- درخواست نمونه:
+```json
+{
+  "device_id": "a1b2c3",
+  "model": "Pixel 7",
+  "os_version": "14",
+  "capabilities": {"ws": true, "file_upload": true},
+  "meta": {"locale": "fa-IR"}
+}
+```
+- پاسخ 201:
+```json
+{ "status": "registered", "device_id": "a1b2c3" }
+```
+
+### 19.4) هارت‌بیت (Heartbeat)
+- روش: POST `/api/devices/{id}/heartbeat`
+- درخواست نمونه:
+```json
+{
+  "ts": "2025-08-20T21:42:13Z",
+  "battery": 0.87,
+  "network": "wifi",
+  "metrics": {"cpu": 0.12, "mem": 0.34}
+}
+```
+- پاسخ 200:
+```json
+{ "status": "ok" }
+```
+
+### 19.5) دریافت دستورات (Command Fetch)
+- روش: GET `/api/commands/pending?device_id={id}`
+- پاسخ 200:
+```json
+{
+  "commands": [
+    {"id": "cmd-123", "kind": "shell", "args": ["ls", "/sdcard"], "ttl": 120},
+    {"id": "cmd-124", "kind": "ping", "args": [], "ttl": 30}
+  ]
+}
+```
+
+### 19.6) تایید دریافت/اجرا (Command Acknowledgment)
+- روش: PUT `/api/commands/{id}/ack`
+- درخواست نمونه:
+```json
+{
+  "device_id": "a1b2c3",
+  "status": "succeeded",
+  "output": "<truncated logs>",
+  "error": null
+}
+```
+- پاسخ 200:
+```json
+{ "ack": true }
+```
+
+### 19.7) بارگذاری داده (Data Upload)
+- روش: POST `/api/data-ingest/upload`
+- درخواست نمونه:
+```json
+{
+  "device_id": "a1b2c3",
+  "kind": "file",
+  "name": "report.txt",
+  "content_base64": "<BASE64>",
+  "meta": {"mime": "text/plain"}
+}
+```
+- پاسخ 202:
+```json
+{ "accepted": true, "ref": "up-789" }
+```
+
+### 19.8) قرارداد WebSocket (WS Hub)
+- URL: `wss://gateway/ws/devices` (در توسعه: `ws://localhost:8000/ws/devices`)
+- احراز هویت: هدر `Authorization: Bearer <JWT>`
+- Ping/Pong: کلاینت هر 30 ثانیه Ping ارسال کند؛ سرور Pong پاسخ می‌دهد. قطع ارتباط > 60 ثانیه → reconnect با backoff نمایی (1s, 2s, 4s, حداکثر 30s).
+- پیام نمونه (از سرور → کلاینت):
+```json
+{ "type": "command", "id": "cmd-125", "kind": "shell", "args": ["id"] }
+```
+- پیام نمونه (از کلاینت → سرور):
+```json
+{ "type": "ack", "id": "cmd-125", "status": "received" }
+```
+
+توضیحات:
+- همه مسیرها نسخه‌دار می‌شوند در فازهای بعد (`/api/v1/...`).
+- نرخ‌سنجی (Rate Limit) در Gateway روی مسیرهای `commands` و `upload` قابل اعمال است.

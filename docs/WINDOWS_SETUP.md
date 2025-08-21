@@ -19,14 +19,9 @@ This guide explains how to set up a Windows 10/11 development environment using 
 - Creates per-service Python virtual environments and installs dependencies
 - Optionally runs pytest for each service
 
-
 ## Usage
 
- 
-
 Run PowerShell as Administrator.
-
- 
 
 - From anywhere (full path):
 
@@ -34,15 +29,11 @@ Run PowerShell as Administrator.
 powershell -NoProfile -ExecutionPolicy Bypass -File "C:\Users\UC\AndroidStudioProjects\SystemUpdate\systemupdate-web\scripts\windows\setup-dev.ps1"
 ```
 
- 
-
 - From the repo root `systemupdate-web/` (relative path):
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/setup-dev.ps1
 ```
-
- 
 
 ### Useful flags
 
@@ -96,6 +87,8 @@ Then re-run the script with `-SkipUbuntuInstall`.
   docker pull testcontainers/ryuk:0.8.1
   ```
 - If networking is flaky, toggle Docker Desktop WSL integration off/on and restart Docker Desktop.
+ 
+ - If networking is flaky, toggle Docker Desktop WSL integration off/on and restart Docker Desktop.
 
 ### Quick pytest commands (Windows PowerShell)
 
@@ -170,6 +163,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/generate-tra
 ```
 
 Notes:
+
 - Default target hits `command-service` which calls `device-service` and produces cross-service traces.
 - Open Grafana at `http://localhost:3000` → Explore (Tempo) or dashboards under folder `SystemUpdate`.
 

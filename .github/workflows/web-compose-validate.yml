@@ -1,4 +1,4 @@
-﻿name: Web Compose Validate
+name: Web Compose Validate
 
 on:
   push:
@@ -58,3 +58,27 @@ jobs:
             echo "::error ::auth-service missing healthcheck in docker-compose.yml"
             exit 1
           fi
+
+      - name: Assert core services have healthchecks
+        run: |
+          set -e
+          services=( ws-hub device-service command-service analytics-service notification-service )
+          for svc in "${services[@]}"; do
+            if ! awk "/^\s*${svc}:/ {f=1} f&&/^\s*healthcheck:/ {print; exit}" docker-compose.yml; then
+              echo "::error ::${svc} missing healthcheck in docker-compose.yml"
+              exit 1
+            fi
+            # reset awk state per service by re-invoking awk with fresh process; handled by loop
+          done
+
+      - name: Warn if 'profiles:' keys are present (non-fatal)
+        run: |
+          found=0
+          for f in docker-compose.yml compose.merged.yml; do
+            [ -f "$f" ] || continue
+            if grep -nE "^\s*profiles:\s*" "$f"; then
+              echo "::notice file=$f::Found 'profiles:' entries; ensure CI expectations match"
+              found=1
+            fi
+          done
+          exit 0

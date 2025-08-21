@@ -1,0 +1,126 @@
+name: ws-hub-smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  ws-hub-smoke:
+    name: WS Hub Smoke (isolated)
+    runs-on: ubuntu-latest
+    # Only run if token secret is present
+    if: ${{ secrets.WS_HUB_SMOKE_TOKEN != '' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Pre-clean any prior stack (best effort)
+        run: |
+          docker ps -a || true
+          docker compose -f ci-ws-smoke.yml --project-name ci-ws-smoke down -v || true
+
+      - name: Generate minimal compose for WS smoke
+        run: |
+          cat > ci-ws-smoke.yml <<'YAML'
+          services:
+            redis:
+              image: redis:7
+              ports:
+                - "6379:6379"
+              healthcheck:
+                test: ["CMD", "redis-cli", "ping"]
+                interval: 5s
+                timeout: 3s
+                retries: 60
+
+            ws-hub:
+              build:
+                context: ./services/ws-hub
+              environment:
+                REDIS__HOST: redis
+                REDIS__PORT: "6379"
+                AUTH_REQUIRED: "0"  # disable auth in CI by default; if your ws-hub requires token, it will still accept connect for ping route
+                PORT: "8002"
+              ports:
+                - "8002:8002"
+              depends_on:
+                redis:
+                  condition: service_healthy
+              healthcheck:
+                test: ["CMD-SHELL", "curl -fsS http://localhost:8002/healthz || exit 1"]
+                interval: 5s
+                timeout: 3s
+                retries: 120
+          YAML
+
+      - name: Compose config (guard minimal services only)
+        run: |
+          echo 'Resolved config:'
+          docker compose -f ci-ws-smoke.yml --project-name ci-ws-smoke config
+          services=$(docker compose -f ci-ws-smoke.yml --project-name ci-ws-smoke config --services)
+          echo "Services: $services"
+          for s in $services; do
+            case "$s" in
+              redis|ws-hub) : ;;  # allowed
+              *) echo "Unexpected service in CI WS smoke: $s" && exit 1 ;;
+            esac
+          done
+
+      - name: Bring up minimal stack
+        run: |
+          docker compose -f ci-ws-smoke.yml --project-name ci-ws-smoke up -d --build
+          docker compose -f ci-ws-smoke.yml --project-name ci-ws-smoke ps
+
+      - name: Wait for health endpoints (ws-hub)
+        run: |
+          for url in http://localhost:8002/healthz; do
+            echo "Waiting for $url"
+            for i in $(seq 1 120); do
+              if curl -fsS "$url" >/dev/null 2>&1; then echo OK; break; fi
+              sleep 2
+              if [ $i -eq 120 ]; then echo "Timeout waiting for $url"; docker compose -f ci-ws-smoke.yml --project-name ci-ws-smoke logs; exit 1; fi
+            done
+          done
+
+      - name: Install websocat client
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y websocat
+
+      - name: WebSocket connect & ping (if token provided)
+        env:
+          TOKEN: ${{ secrets.WS_HUB_SMOKE_TOKEN }}
+          CLIENT_ID: ${{ vars.WS_HUB_SMOKE_CLIENT_ID || 'ci-smoke' }}
+        run: |
+          set -e
+          URL="ws://127.0.0.1:8002/ws?client_id=${CLIENT_ID}"
+          echo "Connecting to $URL"
+          # Send a ping frame and close; ignore if server doesn't support ping command line
+          printf "ping\n" | websocat -v -H "Authorization: Bearer ${TOKEN}" "$URL" || {
+            echo "websocat failed; capturing logs for triage";
+            docker compose -f ci-ws-smoke.yml --project-name ci-ws-smoke logs || true;
+            exit 1;
+          }
+
+      - name: Capture logs
+        if: always()
+        run: |
+          docker compose -f ci-ws-smoke.yml --project-name ci-ws-smoke ps || true
+          docker compose -f ci-ws-smoke.yml --project-name ci-ws-smoke logs --no-color > ws-smoke-logs.txt || true
+
+      - name: Upload logs artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ws-hub-smoke-logs
+          path: ws-smoke-logs.txt
+
+      - name: Teardown
+        if: always()
+        run: |
+          docker compose -f ci-ws-smoke.yml --project-name ci-ws-smoke down -v

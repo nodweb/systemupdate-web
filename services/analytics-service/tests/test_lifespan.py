@@ -13,7 +13,7 @@ async def test_lifespan_does_not_start_consumer_in_pytest():
     """
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
-        resp = await ac.post("/stream/start", json={"topics": ["device.ingest.raw"]})
+        resp = await ac.post("/stream/start", json=["device.ingest.raw"])
     assert resp.status_code == 200
     body = resp.json()
     assert body.get("ok") is True

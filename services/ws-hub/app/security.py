@@ -3,7 +3,16 @@ import time
 from typing import Any, Dict, Optional
 
 import httpx
-from jose import jwt
+
+
+def _import_jose_jwt():
+    try:
+        from jose import jwt  # type: ignore
+
+        return jwt
+    except Exception:
+        return None
+
 
 JWKS_CACHE: Dict[str, Any] = {"keys": None, "fetched_at": 0}
 JWKS_TTL_SECONDS = int(os.getenv("OIDC_JWKS_TTL", "300"))
@@ -41,6 +50,11 @@ def _find_key(jwks: Dict[str, Any], kid: str) -> Optional[Dict[str, Any]]:
 
 
 def validate_jwt(token: str) -> Dict[str, Any]:
+    jwt = _import_jose_jwt()
+    if jwt is None:
+        raise RuntimeError(
+            "python-jose is required to validate JWTs; install 'python-jose' or set AUTH_INTROSPECT_URL to use remote introspection."
+        )
     unverified_headers = jwt.get_unverified_header(token)
     kid = unverified_headers.get("kid")
     if not kid:

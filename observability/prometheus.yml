@@ -1,5 +1,6 @@
 global:
   scrape_interval: 15s
+  evaluation_interval: 15s
 
 rule_files:
   - /etc/prometheus/alerts.rules.yml
@@ -11,23 +12,25 @@ alerting:
         - targets: ['alertmanager:9093']
 
 scrape_configs:
+  # OpenTelemetry Collector
   - job_name: 'otel-collector'
     static_configs:
       - targets: ['otel-collector:8889']
 
+  # Blackbox HTTP Probes
   - job_name: 'blackbox-http'
     metrics_path: /probe
     params:
       module: [http_2xx]
     static_configs:
       - targets:
-          - http://command-service:8004/health
-          - http://device-service:8003/health
-          - http://auth-service:8001/health
-          - http://ws-hub:8002/health
-          - http://analytics-service:8006/health
-          - http://data-ingest-service:8005/health
-          - http://notification-service:8007/health
+          - http://command-service:8004/healthz
+          - http://device-service:8003/healthz
+          - http://auth-service:8001/healthz
+          - http://ws-hub:8002/healthz
+          - http://analytics-service:8006/healthz
+          - http://data-ingest-service:8005/healthz
+          - http://notification-service:8007/healthz
     relabel_configs:
       - source_labels: [__address__]
         target_label: __param_target
@@ -35,3 +38,60 @@ scrape_configs:
         target_label: instance
       - target_label: __address__
         replacement: blackbox-exporter:9115
+
+  # Service Metrics
+  - job_name: 'services-metrics'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets:
+        - 'command-service:8004'
+        - 'device-service:8003'
+        - 'auth-service:8001'
+        - 'ws-hub:8002'
+        - 'analytics-service:8006'
+        - 'data-ingest-service:8005'
+        - 'notification-service:8007'
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __metrics_path__
+        regex: '([^:]+)(:\d+)?'
+        replacement: '/metrics'
+      - source_labels: [__address__]
+        target_label: instance
+        regex: '([^:]+)(:\d+)?'
+        replacement: '$1'
+
+  # Node Exporter
+  - job_name: 'node'
+    static_configs:
+      - targets: ['node-exporter:9100']
+
+  # cAdvisor
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+
+  # Redis
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis:9121']
+
+  # PostgreSQL
+  - job_name: 'postgresql'
+    static_configs:
+      - targets: ['postgres:9187']
+
+  # Kafka
+  - job_name: 'kafka'
+    static_configs:
+      - targets: ['kafka:9308']
+
+  # Grafana
+  - job_name: 'grafana'
+    static_configs:
+      - targets: ['grafana:3000']
+
+  # Alertmanager
+  - job_name: 'alertmanager'
+    static_configs:
+      - targets: ['alertmanager:9093']

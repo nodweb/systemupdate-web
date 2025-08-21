@@ -87,17 +87,85 @@ Remove-Item Env:AUTH_REQUIRED -ErrorAction SilentlyContinue
 Remove-Item Env:AUTHZ_REQUIRED -ErrorAction SilentlyContinue
 ```
 
-### Keycloak dev profile (OIDC/JWKS)
+### Keycloak Integration (OIDC/JWKS)
 
-For local OIDC with real JWTs, you can start a Keycloak dev realm via Compose and configure JWKS verification.
+For local OIDC with real JWTs, we've set up a development Keycloak instance with a pre-configured realm and test user.
 
-1) Start Keycloak (profile `auth`):
+#### Starting Keycloak
+
+1. Use the setup script to start all required services:
 
 ```powershell
-docker compose --profile auth up -d keycloak
+# From the project root
+.\scripts\setup-dev.ps1
 ```
 
-2) Realm import: `auth/keycloak/systemupdate-realm.json`
+This will:
+- Start PostgreSQL, Redis, and Keycloak
+- Configure the `systemupdate-dev` realm
+- Create a test client and user
+- Generate/update the `.env` file with the correct configuration
+
+#### Accessing Keycloak
+
+- **Admin Console**: http://localhost:8080/admin
+  - Username: `admin`
+  - Password: `admin`
+
+- **Realm Login Page**: http://localhost:8080/realms/systemupdate-dev/account
+
+#### Test User
+
+A test user is automatically created:
+- Username: `testuser`
+- Password: `test123`
+
+#### Obtaining a JWT Token
+
+You can obtain a JWT token using the following credentials:
+
+```bash
+# Using curl
+curl -X POST http://localhost:8080/realms/systemupdate-dev/protocol/openid-connect/token \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "username=testuser&password=test123&grant_type=password&client_id=systemupdate-backend&client_secret=your-client-secret"
+```
+
+Or programmatically in your application using the OAuth2 client credentials flow.
+
+#### Environment Variables
+
+The setup script will update your `.env` file with the following Keycloak configuration:
+
+```env
+# Keycloak Configuration
+KEYCLOAK_URL=http://localhost:8080
+KEYCLOAK_REALM=systemupdate-dev
+KEYCLOAK_CLIENT_ID=systemupdate-backend
+KEYCLOAK_CLIENT_SECRET=your-client-secret
+KEYCLOAK_JWKS_URI=http://localhost:8080/realms/systemupdate-dev/protocol/openid-connect/certs
+
+# Kong JWT Configuration
+AUTH_REQUIRED=true
+```
+
+#### Verifying JWTs
+
+Kong is configured to validate JWTs using the Keycloak JWKS endpoint. The validation includes:
+- Signature verification using the public keys from the JWKS endpoint
+- Standard JWT claims validation (exp, iss, aud)
+- Custom claims verification
+
+#### Development Notes
+
+- The Keycloak instance is configured with a development profile for easier local development
+- All data is persisted in Docker volumes
+- For production, you should:
+  - Change all default passwords
+  - Enable HTTPS
+  - Configure proper client secrets
+  - Set up proper realm and client configurations
+  - Implement proper user management and authentication flows
 
 - Console: http://localhost:8080
 - Admin login: admin / admin

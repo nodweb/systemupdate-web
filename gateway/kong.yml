@@ -8,6 +8,7 @@ services:
       - name: auth-route
         paths: ["/auth"]
         strip_path: true
+        # Public route - no auth required
 
   - name: device-service
     url: http://device-service:8003
@@ -15,6 +16,7 @@ services:
       - name: device-route
         paths: ["/devices"]
         strip_path: false
+        plugins: ${{ env.AUTH_REQUIRED == "1" ? [{"name": "jwt"}] : [] }}
 
   - name: command-service
     url: http://command-service:8004
@@ -22,6 +24,7 @@ services:
       - name: command-route
         paths: ["/commands"]
         strip_path: false
+        plugins: ${{ env.AUTH_REQUIRED == "1" ? [{"name": "jwt"}] : [] }}
 
   - name: ingest-service
     url: http://data-ingest-service:8005
@@ -29,6 +32,7 @@ services:
       - name: ingest-http
         paths: ["/ingest"]
         strip_path: false
+        plugins: ${{ env.AUTH_REQUIRED == "1" ? [{"name": "jwt"}] : [] }}
 
   - name: analytics-service
     url: http://analytics-service:8006
@@ -36,6 +40,7 @@ services:
       - name: analytics-route
         paths: ["/analytics"]
         strip_path: true
+        plugins: ${{ env.AUTH_REQUIRED == "1" ? [{"name": "jwt"}] : [] }}
 
   - name: notification-service
     url: http://notification-service:8007
@@ -43,6 +48,7 @@ services:
       - name: notif-route
         paths: ["/notify"]
         strip_path: true
+        plugins: ${{ env.AUTH_REQUIRED == "1" ? [{"name": "jwt"}] : [] }}
 
 plugins:
   - name: cors
@@ -70,8 +76,14 @@ plugins:
       minute: 120
       policy: local
   - name: jwt
-    enabled: false
+    enabled: true  # Controlled per-route via env.AUTH_REQUIRED
     config:
       claims_to_verify: [exp]
-      key_claim_name: kid
-      run_on_preflight: false
+      key_claim_name: iss  # Match Keycloak's default claim for issuer
+      run_on_preflight: true  # Required for CORS preflight
+      secret_is_base64: false
+      key_claim_name: iss  # Use issuer as key claim for JWT verification
+      # Keycloak JWKS endpoint will be provided via environment variable
+      key: ${{ env.KEYCLOAK_JWKS_URI }}
+      # Cache JWKS keys for 1 hour (in seconds)
+      cache_ttl: 3600

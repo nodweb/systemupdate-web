@@ -4,9 +4,14 @@ import os
 import time
 from typing import Optional, Protocol
 
+import uvicorn
 from aiokafka import AIOKafkaConsumer
+from fastapi import FastAPI
 from jsonschema import Draft202012Validator
 from prometheus_client import Counter, Histogram, start_http_server
+
+# Import shared health check module
+from libs.shared_python.health import HealthChecker, setup_health_endpoints
 
 SCHEMA_PATH = os.getenv(
     "SCHEMA_PATH",
@@ -26,6 +31,60 @@ CONSUMER_GROUP = os.getenv("CONSUMER_GROUP", "sample-command-consumer")
 IDEMP_STORE = os.getenv("IDEMP_STORE", "memory").lower()
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 POSTGRES_DSN = os.getenv("POSTGRES_DSN", "")
+
+# Initialize FastAPI app
+app = FastAPI(title="Sample Kafka Consumer", version="0.1.0")
+
+# Initialize health checker
+health_checker = HealthChecker(service_name="sample-consumer", version="0.1.0")
+
+
+async def check_kafka_health():
+    """Check Kafka connection health"""
+    try:
+        # Try to create a test consumer with a short timeout
+        test_consumer = AIOKafkaConsumer(
+            bootstrap_servers=KAFKA_BOOTSTRAP,
+            group_id=f"health-check-{os.getpid()}",
+            request_timeout_ms=3000,
+            api_version_auto_timeout_ms=3000,
+        )
+
+        # Try to start the consumer with a timeout
+        await asyncio.wait_for(test_consumer.start(), timeout=3.0)
+
+        # Check if we can get the cluster metadata
+        cluster_metadata = await test_consumer.client.bootstrap()
+        if not cluster_metadata.brokers():
+            return {"status": "error", "message": "No Kafka brokers available"}
+
+        # Check if the topic exists
+        topics = await test_consumer.topics()
+        if KAFKA_TOPIC not in topics:
+            return {
+                "status": "warning",
+                "message": f"Configured topic '{KAFKA_TOPIC}' not found",
+            }
+
+        await test_consumer.stop()
+        return {
+            "status": "ok",
+            "message": f"Connected to Kafka at {KAFKA_BOOTSTRAP}",
+            "topic": KAFKA_TOPIC,
+            "consumer_group": CONSUMER_GROUP,
+        }
+
+    except asyncio.TimeoutError:
+        return {"status": "error", "message": "Kafka connection timeout"}
+    except Exception as e:
+        return {"status": "error", "message": f"Kafka error: {str(e)}"}
+
+
+# Register health checks
+health_checker.add_check("kafka", check_kafka_health)
+
+# Setup health endpoints
+setup_health_endpoints(app, health_checker)
 
 # Prometheus metrics
 METRICS_PORT = int(os.getenv("METRICS_PORT", "9000"))
@@ -184,12 +243,36 @@ async def consume(validator: Draft202012Validator) -> None:
             await consumer.stop()
 
 
-async def main() -> None:
+async def consume_loop():
+    """Run the Kafka consumer in the background."""
     validator = load_validator(SCHEMA_PATH)
-    # expose metrics
-    start_http_server(METRICS_PORT)
     await consume(validator)
 
 
+async def start_consumer():
+    """Start the Kafka consumer in the background."""
+    # Start Prometheus metrics server
+    start_http_server(METRICS_PORT)
+    asyncio.create_task(consume_loop())
+
+
+def main():
+    # Start the FastAPI server
+    config = uvicorn.Config(
+        app,
+        host="0.0.0.0",
+        port=8000,
+        log_level="info",
+    )
+    server = uvicorn.Server(config)
+
+    # Start the consumer in the background
+    loop = asyncio.get_event_loop()
+    loop.create_task(start_consumer())
+
+    # Start the FastAPI server
+    loop.run_until_complete(server.serve())
+
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

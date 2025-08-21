@@ -2,6 +2,7 @@
 # NOTE: Service definitions are minimal and may be extended in M1+.
 
 services:
+  # Main application PostgreSQL
   postgres:
     image: postgres:15-alpine
     container_name: su-postgres
@@ -15,6 +16,22 @@ services:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      
+  # Keycloak PostgreSQL
+  keycloak-db:
+    image: postgres:15-alpine
+    container_name: su-keycloak-db
+    environment:
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: keycloak
+      POSTGRES_DB: keycloak
+    volumes:
+      - keycloak_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -156,12 +173,11 @@ services:
       - "8001:8001"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:8001/healthz >/dev/null || exit 1"]
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8001/healthz"]
       interval: 10s
-      timeout: 5s
-      retries: 12
-
-  
+      timeout: 3s
+      retries: 3
+      start_period: 10s
 
   notification-service:
     build: ./services/notification-service
@@ -176,10 +192,11 @@ services:
       - "8007:8007"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:8007/healthz >/dev/null || exit 1"]
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8007/healthz"]
       interval: 10s
-      timeout: 5s
-      retries: 12
+      timeout: 3s
+      retries: 3
+      start_period: 10s
     depends_on:
       otel-collector:
         condition: service_started
@@ -197,10 +214,11 @@ services:
       - "8002:8002"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:8002/healthz >/dev/null || exit 1"]
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8002/healthz"]
       interval: 10s
-      timeout: 5s
-      retries: 12
+      timeout: 3s
+      retries: 3
+      start_period: 10s
     depends_on:
       redis:
         condition: service_healthy
@@ -218,10 +236,11 @@ services:
       - "8003:8003"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:8003/healthz >/dev/null || exit 1"]
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8003/healthz"]
       interval: 10s
-      timeout: 5s
-      retries: 12
+      timeout: 3s
+      retries: 3
+      start_period: 10s
     depends_on:
       postgres:
         condition: service_healthy
@@ -246,10 +265,11 @@ services:
       - "8004:8004"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:8004/healthz >/dev/null || exit 1"]
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8004/healthz"]
       interval: 10s
-      timeout: 5s
-      retries: 12
+      timeout: 3s
+      retries: 3
+      start_period: 10s
     depends_on:
       postgres:
         condition: service_healthy
@@ -271,10 +291,11 @@ services:
       - "8005:8005"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:8005/healthz >/dev/null || exit 1"]
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8005/healthz"]
       interval: 10s
-      timeout: 5s
-      retries: 12
+      timeout: 3s
+      retries: 3
+      start_period: 10s
     depends_on:
       redis:
         condition: service_healthy
@@ -382,23 +403,47 @@ services:
         condition: service_healthy
 
   # Optional: Keycloak for OIDC dev profile (enable with: docker compose --profile auth up -d keycloak)
-  keycloak:
-    image: quay.io/keycloak/keycloak:24.0
-    container_name: su-keycloak
-    profiles: ["auth"]
-    command: ["start-dev", "--import-realm"]
+  keycloak-db:
+    image: postgres:15-alpine
+    container_name: su-keycloak-db
     environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: keycloak
+    volumes:
+      - keycloak_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0.2
+    container_name: su-keycloak
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: keycloak
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_HOSTNAME: localhost
+      KC_HTTP_ENABLED: 'true'
+      KC_PROXY: edge
+      KC_HOSTNAME_STRICT: 'false'
+    command: ["start-dev"]
     ports:
       - "8080:8080"
-    volumes:
-      - ./auth/keycloak:/opt/keycloak/data/import:ro
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/realms/master/.well-known/openid-configuration >/dev/null || exit 1"]
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health/ready"]
       interval: 10s
       timeout: 5s
-      retries: 30
+      retries: 5
+    profiles: ["dev"]
 
   # Optional: OPA for policy decisions and decision logs (enable with: docker compose --profile policy up -d opa)
   opa:
@@ -466,6 +511,8 @@ services:
       - "4319:4317"   # OTLP/gRPC (host 4319 -> container 4317 to avoid conflict)
       - "4320:4318"   # OTLP/HTTP (host 4320 -> container 4318)
 
+
 volumes:
   pgdata:
   minio:
+  keycloak_db_data:

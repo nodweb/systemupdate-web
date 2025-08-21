@@ -23,7 +23,9 @@ def test_http_ingest_disallowed_kind(monkeypatch):
         json={"device_id": "d1", "kind": "log", "data": {"m": 1}},
     )
     assert resp.status_code == 422
-    assert "not allowed" in resp.json()["detail"]
+    body = resp.json()
+    assert "error" in body
+    assert "not allowed" in body["error"]["message"]
 
 
 def test_http_ingest_payload_too_large(monkeypatch):
@@ -36,4 +38,5 @@ def test_http_ingest_payload_too_large(monkeypatch):
         json={"device_id": "d1", "kind": "metric", "data": big},
     )
     assert resp.status_code == 413
-    assert resp.json()["detail"] == "payload too large"
+    body = resp.json()
+    assert body["error"]["message"] == "payload too large"

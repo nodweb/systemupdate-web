@@ -1,0 +1,25 @@
+# Test requirements for SystemUpdate security tests
+
+# Core testing
+pytest==8.0.0
+pytest-cov==4.1.0
+pytest-mock==3.12.0
+
+# HTTP client
+requests==2.31.0
+
+# Environment management
+python-dotenv==1.0.0
+
+# Type checking
+mypy==1.8.0
+types-requests==2.31.0.1
+
+# Linting
+pylint==3.0.3
+black==24.1.1
+isort==5.13.2
+
+# Test data generation
+factory-boy==3.3.0
+Faker==21.1.0

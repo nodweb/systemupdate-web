@@ -98,6 +98,31 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d gateway-se
 # Proxy: http://localhost (port 80). Admin (8001) is NOT exposed in this override.
 ```
 
+## TLS & Pinning
+
+This section defines the canonical endpoints and certificate pinning policy for Android and Web clients.
+
+- Production hostname: `api.systemupdate.com`
+  - Ports: 443 (HTTPS/WSS), 80 (HTTP redirect only)
+- Development hostname: `localhost`
+  - Ports: 8000 (gateway proxy HTTP), 8080 (Keycloak dev realm when enabled)
+
+Certificate rotation policy:
+- Provide at least 30 days advance notice prior to certificate/key rotation.
+- Maintain dual pins in clients (current + next) during the rotation window to avoid bricking older clients.
+
+Pin update procedure (Android/Web):
+1. Generate new certificate and publish updated chain to the gateway/load balancer.
+2. Add the new SPKI pin alongside the existing pin in client configuration.
+   - Android: update app config (e.g., `BuildConfig`/network security config) with `PIN_NEXT` while keeping `PIN_CUR`.
+   - Web (if applicable): update trust/pin configuration in the WS client or reverse proxy.
+3. Roll out the client update before switching the active certificate.
+4. After sufficient adoption, remove the old pin and finalize the rotation.
+
+Notes:
+- Document the public key pin(s) and expiration in release notes and `docs/TEST_GUIDE.md`.
+- For local development, pinning is disabled; use HTTP on port 8000 and self-signed certs only in isolated tests.
+
 ### OPAL policy bundles (optional)
 
 You can run OPAL server/client to demo policy bundle sync into OPA:

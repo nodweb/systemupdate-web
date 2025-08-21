@@ -1,7 +1,8 @@
-import socket
 import os
-import pytest
+import socket
 import urllib.request
+
+import pytest
 
 pytestmark = pytest.mark.docker
 
@@ -36,6 +37,7 @@ def test_postgres_select_one():
     try:
         try:
             import psycopg
+
             driver = "psycopg3"
             conn = psycopg.connect(
                 host=os.getenv("POSTGRES_HOST", "localhost"),
@@ -50,6 +52,7 @@ def test_postgres_select_one():
                 assert cur.fetchone()[0] == 1
         except ImportError:
             import psycopg2  # type: ignore
+
             driver = "psycopg2"
             conn = psycopg2.connect(
                 host=os.getenv("POSTGRES_HOST", "localhost"),

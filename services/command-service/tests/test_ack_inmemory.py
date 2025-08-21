@@ -1,5 +1,6 @@
 import httpx
 import pytest
+
 from app.main import app, on_shutdown, on_startup
 
 

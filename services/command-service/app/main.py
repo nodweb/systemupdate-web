@@ -1,13 +1,52 @@
 import asyncio
+import logging
 import json
 import os
 import uuid
+import httpx
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Literal, Optional, TypedDict
 
 from fastapi import (Depends, FastAPI, Header, HTTPException, Request,
                      Response, status)
+
+# Import shared health check module
+from libs.shared_python.health import HealthChecker, setup_health_endpoints
+
+# Try monorepo-level middleware/handlers first; fall back to dynamic import by path
+try:
+    from app.handlers.exception_handler import register_exception_handlers
+    from app.middleware.context import RequestContextMiddleware
+    from app.middleware.logging_middleware import RequestLoggingMiddleware
+except Exception:
+    import importlib
+    import pathlib
+    import sys
+    import types
+
+    _root = pathlib.Path(__file__).resolve().parents[3]
+    if str(_root) not in sys.path:
+        sys.path.insert(0, str(_root))
+    # Temporarily point 'app' to the repo-level package so its subimports resolve correctly
+    _orig_app_pkg = sys.modules.get("app")
+    try:
+        _fake_app = types.ModuleType("app")
+        _fake_app.__path__ = [str(_root / "app")]  # type: ignore[attr-defined]
+        sys.modules["app"] = _fake_app
+
+        _eh_mod = importlib.import_module("app.handlers.exception_handler")
+        _ctx_mod = importlib.import_module("app.middleware.context")
+        _logmw_mod = importlib.import_module("app.middleware.logging_middleware")
+
+        register_exception_handlers = getattr(_eh_mod, "register_exception_handlers")  # type: ignore
+        RequestContextMiddleware = getattr(_ctx_mod, "RequestContextMiddleware")  # type: ignore
+        RequestLoggingMiddleware = getattr(_logmw_mod, "RequestLoggingMiddleware")  # type: ignore
+    finally:
+        if _orig_app_pkg is not None:
+            sys.modules["app"] = _orig_app_pkg
+        else:
+            sys.modules.pop("app", None)
 
 # Safe import for shared authorize client despite hyphen in directory name
 try:
@@ -36,6 +75,69 @@ except Exception:
 from pydantic import BaseModel, Field
 
 app = FastAPI(title="Command Service", version="0.4.0")
+LOGGER = logging.getLogger(__name__)
+
+# Initialize health checker
+health_checker = HealthChecker(service_name="command-service", version="0.4.0")
+
+
+async def check_db_health():
+    """Check database connection health"""
+    try:
+        # Check if using PostgreSQL
+        dsn = _dsn_from_env()
+        if dsn and "postgresql" in dsn:
+            try:
+                import asyncpg
+
+                conn = await asyncpg.connect(dsn=dsn, timeout=2.0)
+                await conn.execute("SELECT 1")
+                await conn.close()
+                return {"status": "ok", "message": "PostgreSQL connection OK"}
+            except Exception as e:
+                return {"status": "error", "message": f"Database error: {str(e)}"}
+        # Fallback to in-memory check
+        return {"status": "ok", "message": "Using in-memory storage"}
+    except Exception as e:
+        return {"status": "error", "message": f"Database check failed: {str(e)}"}
+
+
+async def check_kafka_health():
+    """Check Kafka connection health"""
+    try:
+        from aiokafka import AIOKafkaProducer
+
+        kafka_bootstrap = os.getenv("KAFKA_BOOTSTRAP", "kafka:9092")
+        producer = AIOKafkaProducer(bootstrap_servers=kafka_bootstrap)
+
+        # Try to start the producer with a timeout
+        await asyncio.wait_for(producer.start(), timeout=3.0)
+
+        # Check if we can get the cluster metadata
+        cluster_metadata = await producer.client.bootstrap()
+        if not cluster_metadata.brokers():
+            return {"status": "error", "message": "No Kafka brokers available"}
+
+        await producer.stop()
+        return {"status": "ok", "message": f"Connected to Kafka at {kafka_bootstrap}"}
+
+    except asyncio.TimeoutError:
+        return {"status": "error", "message": "Kafka connection timeout"}
+    except Exception as e:
+        return {"status": "error", "message": f"Kafka error: {str(e)}"}
+
+
+# Register health checks
+health_checker.add_check("database", check_db_health)
+health_checker.add_check("kafka", check_kafka_health)
+
+# Setup health endpoints
+setup_health_endpoints(app, health_checker)
+
+# Register global exception handlers and middleware
+register_exception_handlers(app)
+app.add_middleware(RequestContextMiddleware)
+app.add_middleware(RequestLoggingMiddleware)
 
 # OpenTelemetry init (no-op if not configured via env), with safe tracer fallback
 try:
@@ -67,9 +169,7 @@ except Exception:
     tracer = _Tracer()
 
 
-@app.get("/healthz")
-async def healthz() -> Dict[str, str]:
-    return {"status": "ok"}
+# Health check endpoints are now provided by setup_health_endpoints
 
 
 class CommandCreate(BaseModel):
@@ -108,6 +208,7 @@ KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "kafka:9092")
 KAFKA_TOPIC = os.getenv("COMMAND_EVENTS_TOPIC", "command.events")
 publisher_task: asyncio.Task[None] | None = None
 DB_DSN: Optional[str] = None  # set when DB is initialized
+COMMAND_PUBLISH_ENABLED = os.getenv("COMMAND_PUBLISH_ENABLED", "true").lower() in {"1","true","yes"}
 
 # Optional authZ controls
 AUTH_REQUIRED = os.getenv("AUTH_REQUIRED", "false").lower() in {"1", "true", "yes"}
@@ -526,20 +627,80 @@ async def _publisher() -> None:
 
 async def _start_background() -> None:
     global publisher_task
-    # ensure tables
+    # Skip background tasks during pytest to avoid external deps (Kafka)
+    if not COMMAND_PUBLISH_ENABLED:
+        try:
+            LOGGER.info(
+                "Service lifecycle event",
+                extra={
+                    "event": "startup",
+                    "service": "command-service",
+                    "component": "publisher",
+                    "enabled": False,
+                    "reason": "COMMAND_PUBLISH_ENABLED=false",
+                },
+            )
+        except Exception:
+            pass
+        return
+    # ensure tables and decide gating based on Kafka presence
     await _maybe_init_db()
+    using_kafka = AIOKafkaProducer is not None
+    if os.environ.get("PYTEST_CURRENT_TEST") and using_kafka:
+        # In tests, do not start publisher if it would touch Kafka
+        try:
+            LOGGER.info(
+                "Service lifecycle event",
+                extra={
+                    "event": "startup",
+                    "service": "command-service",
+                    "component": "publisher",
+                    "enabled": False,
+                    "reason": "pytest_gating_kafka",
+                },
+            )
+        except Exception:
+            pass
+        return
     publisher_task = asyncio.create_task(_publisher())
+    try:
+        LOGGER.info(
+            "Service lifecycle event",
+            extra={
+                "event": "startup",
+                "service": "command-service",
+                "component": "publisher",
+                "enabled": True,
+                "mode": "db" if DB_DSN is not None else ("kafka" if using_kafka else "in_memory"),
+            },
+        )
+    except Exception:
+        pass
 
 
 async def _stop_background() -> None:
     global publisher_task
     if publisher_task is not None:
+        _t0 = asyncio.get_event_loop().time()
         publisher_task.cancel()
         try:
             await publisher_task
         except asyncio.CancelledError:
             pass
         publisher_task = None
+        try:
+            LOGGER.info(
+                "Service lifecycle event",
+                extra={
+                    "event": "shutdown",
+                    "service": "command-service",
+                    "component": "publisher",
+                    "status": "complete",
+                    "duration_seconds": round(asyncio.get_event_loop().time() - _t0, 6),
+                },
+            )
+        except Exception:
+            pass
 
 
 @asynccontextmanager
@@ -625,3 +786,9 @@ def _dsn_from_env() -> Optional[str]:
     db = os.getenv("POSTGRES_DB", "systemupdate")
     port = os.getenv("POSTGRES_PORT", "5432")
     return f"postgresql://{user}:{pwd}@{host}:{port}/{db}"
+
+
+@app.get("/publisher/status")
+async def publisher_status() -> Dict[str, Any]:
+    running = publisher_task is not None and not publisher_task.done()
+    return {"ok": True, "running": running}

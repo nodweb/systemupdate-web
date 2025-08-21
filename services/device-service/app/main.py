@@ -6,6 +6,54 @@ from uuid import uuid4
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
+# Import shared health check module with fallback to repo root path
+try:
+    from libs.shared_python.health import HealthChecker, setup_health_endpoints
+except Exception:
+    import importlib.util
+    import pathlib
+    import sys
+
+    _root = pathlib.Path(__file__).resolve().parents[3]
+    if str(_root) not in sys.path:
+        sys.path.insert(0, str(_root))
+    # Attempt regular import again after adding repo root
+    from libs.shared_python.health import HealthChecker, setup_health_endpoints
+
+# Try monorepo-level middleware/handlers first; fall back to dynamic import by path
+try:
+    from app.handlers.exception_handler import register_exception_handlers
+    from app.middleware.context import RequestContextMiddleware
+    from app.middleware.logging_middleware import RequestLoggingMiddleware
+except Exception:
+    import importlib
+    import pathlib
+    import sys
+    import types
+
+    _root = pathlib.Path(__file__).resolve().parents[3]
+    if str(_root) not in sys.path:
+        sys.path.insert(0, str(_root))
+    # Temporarily point 'app' to the repo-level package so its subimports resolve correctly
+    _orig_app_pkg = sys.modules.get("app")
+    try:
+        _fake_app = types.ModuleType("app")
+        _fake_app.__path__ = [str(_root / "app")]  # type: ignore[attr-defined]
+        sys.modules["app"] = _fake_app
+
+        _eh_mod = importlib.import_module("app.handlers.exception_handler")
+        _ctx_mod = importlib.import_module("app.middleware.context")
+        _logmw_mod = importlib.import_module("app.middleware.logging_middleware")
+
+        register_exception_handlers = getattr(_eh_mod, "register_exception_handlers")  # type: ignore
+        RequestContextMiddleware = getattr(_ctx_mod, "RequestContextMiddleware")  # type: ignore
+        RequestLoggingMiddleware = getattr(_logmw_mod, "RequestLoggingMiddleware")  # type: ignore
+    finally:
+        if _orig_app_pkg is not None:
+            sys.modules["app"] = _orig_app_pkg
+        else:
+            sys.modules.pop("app", None)
+
 # Safe import for shared authorize client despite hyphen in directory name
 try:
     from libs.shared_python.security.authorize_client import \
@@ -102,6 +150,40 @@ except Exception:
 
 app = FastAPI(title="SystemUpdate Device Service", version="0.2.0")
 
+# Initialize health checker
+health_checker = HealthChecker(service_name="device-service", version="0.2.0")
+
+
+# Register health checks
+@health_checker.register_check("database")
+async def check_db_connection():
+    # TODO: Add actual database connection check
+    return {"status": "ok", "message": "Database connection OK"}
+
+
+async def check_db_health():
+    """Check database connection health"""
+    try:
+        # Replace with actual database connection check
+        # Example for SQLAlchemy:
+        # async with async_session() as session:
+        #     await session.execute("SELECT 1")
+        return {"status": "ok", "message": "Database connection OK"}
+    except Exception as e:
+        return {"status": "error", "message": f"Database error: {str(e)}"}
+
+
+# Register health checks
+health_checker.add_check("database", check_db_health)
+
+# Setup health endpoints
+setup_health_endpoints(app, health_checker)
+
+# Register global exception handlers and middleware
+register_exception_handlers(app)
+app.add_middleware(RequestContextMiddleware)
+app.add_middleware(RequestLoggingMiddleware)
+
 # OpenTelemetry initialization (no-op if not configured via env)
 try:
     from .otel import init_tracing
@@ -112,13 +194,7 @@ except Exception:
     pass
 
 
-class HealthResponse(BaseModel):
-    status: str
-
-
-@app.get("/healthz", response_model=HealthResponse)
-async def healthz() -> HealthResponse:
-    return HealthResponse(status="ok")
+# Health check endpoints are now provided by setup_health_endpoints
 
 
 class DeviceCreate(BaseModel):

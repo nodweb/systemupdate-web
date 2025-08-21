@@ -1,6 +1,17 @@
+import importlib.util
+import pathlib
+import sys
+
 from fastapi.testclient import TestClient
 
-from services.data-ingest-service.app.main import app  # type: ignore
+# Always load the service's app.main by file path to avoid repo-level app import
+_svc_main = pathlib.Path(__file__).resolve().parents[1] / "app" / "main.py"
+spec = importlib.util.spec_from_file_location("ingest_app_main", _svc_main)
+assert spec and spec.loader
+mod = importlib.util.module_from_spec(spec)
+sys.modules["ingest_app_main"] = mod
+spec.loader.exec_module(mod)
+app = getattr(mod, "app")
 
 
 def test_ws_ingest_accepts_and_replies():

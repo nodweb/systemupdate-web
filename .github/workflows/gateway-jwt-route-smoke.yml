@@ -1,0 +1,163 @@
+name: gateway-jwt-route-smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  gateway-jwt-route-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Pre-clean
+        run: |
+          docker compose -f ci-gw.yml --project-name ci-gw down -v || true
+
+      - name: Generate minimal compose (Kong + auth-service)
+        run: |
+          cat > ci-gw.yml <<'YAML'
+          services:
+            auth-service:
+              build:
+                context: ./services/auth-service
+              environment:
+                PORT: "8001"
+              ports:
+                - "8001:8001"
+              healthcheck:
+                test: ["CMD-SHELL", "curl -fsS http://localhost:8001/healthz || exit 1"]
+                interval: 5s
+                timeout: 3s
+                retries: 120
+
+            gateway:
+              image: kong:3.6
+              environment:
+                KONG_DATABASE: off
+                KONG_DECLARATIVE_CONFIG: /etc/kong/kong.yml
+                KONG_LOG_LEVEL: info
+                KONG_PROXY_LISTEN: 0.0.0.0:8000
+                KONG_ADMIN_LISTEN: 0.0.0.0:8001
+              ports:
+                - "8000:8000"
+                - "8009:8001" # admin mapped to 8009 on host to avoid overlap
+              volumes:
+                - ./kong.ci.yml:/etc/kong/kong.yml:ro
+              depends_on:
+                auth-service:
+                  condition: service_healthy
+              healthcheck:
+                test: ["CMD-SHELL", "curl -fsS http://localhost:8009/status || exit 1"]
+                interval: 5s
+                timeout: 3s
+                retries: 120
+          YAML
+
+      - name: Generate Kong declarative config with JWT route
+        env:
+          CI_JWT_SECRET: test-secret-123
+          CI_JWT_ISS: ci-issuer
+          CI_JWT_AUD: ci-audience
+        run: |
+          cat > kong.ci.yml <<'YAML'
+          _format_version: "3.0"
+          services:
+            - name: auth-upstream
+              url: http://auth-service:8001
+              routes:
+                - name: jwt-health
+                  paths: [ "/ci/jwt/health" ]
+                  strip_path: false
+                  plugins:
+                    - name: jwt
+                      enabled: true
+                      config:
+                        key_claim_name: iss
+                        secret_is_base64: false
+                        claims_to_verify: ["exp"]
+                        run_on_preflight: true
+          consumers:
+            - username: ci-consumer
+              custom_id: ci-consumer
+              jwt_secrets:
+                - key: ci-issuer
+                  secret: test-secret-123
+          YAML
+
+      - name: Compose guard (expected services)
+        run: |
+          services=$(docker compose -f ci-gw.yml --project-name ci-gw config --services)
+          echo "Services: $services"
+          for s in $services; do
+            case "$s" in auth-service|gateway) : ;; *) echo "Unexpected service $s"; exit 1;; esac
+          done
+
+      - name: Bring up stack
+        run: |
+          docker compose -f ci-gw.yml --project-name ci-gw up -d --build
+          docker compose -f ci-gw.yml --project-name ci-gw ps
+
+      - name: Wait for health
+        run: |
+          for url in http://localhost:8001/healthz http://localhost:8009/status; do
+            echo "Waiting for $url"; for i in $(seq 1 120); do curl -fsS "$url" && break || sleep 2; done
+          done
+
+      - name: Create JWT (HS256)
+        env:
+          CI_JWT_SECRET: test-secret-123
+          CI_JWT_ISS: ci-issuer
+          CI_JWT_AUD: ci-audience
+        id: jwt
+        run: |
+          python3 - <<'PY'
+          import os, time, json, base64, hmac, hashlib
+          def b64url(b):
+              return base64.urlsafe_b64encode(b).rstrip(b'=')
+          header = {"alg":"HS256","typ":"JWT"}
+          now = int(time.time())
+          payload = {"iss": os.environ.get("CI_JWT_ISS"), "aud": os.environ.get("CI_JWT_AUD"), "iat": now, "exp": now+600}
+          seg1 = b64url(json.dumps(header,separators=(',',':')).encode())
+          seg2 = b64url(json.dumps(payload,separators=(',',':')).encode())
+          signing_input = seg1 + b'.' + seg2
+          secret = os.environ.get('CI_JWT_SECRET').encode()
+          sig = hmac.new(secret, signing_input, hashlib.sha256).digest()
+          token = signing_input + b'.' + b64url(sig)
+          print('TOKEN=' + token.decode())
+          PY
+
+      - name: Assert 401 without token
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/ci/jwt/health)
+          echo "no-token: $code"; test "$code" = "401"
+
+      - name: Assert 200 with token
+        env:
+          TOKEN: ${{ steps.jwt.outputs.TOKEN }}
+        run: |
+          code=$(curl -s -H "Authorization: Bearer $TOKEN" -o /dev/null -w "%{http_code}" http://localhost:8000/ci/jwt/health)
+          echo "with-token: $code"; test "$code" = "200"
+
+      - name: Capture logs
+        if: always()
+        run: |
+          docker compose -f ci-gw.yml --project-name ci-gw ps || true
+          docker compose -f ci-gw.yml --project-name ci-gw logs --no-color > gw-jwt-smoke-logs.txt || true
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gateway-jwt-route-smoke-artifacts
+          path: |
+            kong.ci.yml
+            gw-jwt-smoke-logs.txt
+
+      - name: Teardown
+        if: always()
+        run: docker compose -f ci-gw.yml --project-name ci-gw down -v

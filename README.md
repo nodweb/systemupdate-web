@@ -23,11 +23,54 @@ Enterprise-grade web stack for remote Android device management.
 
 - Command events: `docs/EVENTS.md`
 - Idempotency usage: `docs/IDEMPOTENCY.md`
+- Authentication & Authorization: `docs/AUTH_GUIDE.md`
+- Health Check System: `docs/HEALTH_CHECKS.md`
+- OPA Policies: [opa/README.md](opa/README.md)
 
 ## Getting Started (M0)
 
-- Local dev via Docker Compose (to be added in M0)
-- CI: GitHub Actions (lint/test/build) (placeholder)
+### Prerequisites
+
+- Docker and Docker Compose
+- Node.js 18+ and npm
+- Python 3.9+
+
+### Local Development
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/your-org/systemupdate-web.git
+   cd systemupdate-web
+   ```
+
+2. Start the development environment:
+   ```powershell
+   .\scripts\setup-dev.ps1
+   ```
+
+   This will start:
+   - PostgreSQL
+   - Redis
+   - Keycloak (for authentication)
+   - OPA (for authorization)
+   - Other required services
+
+3. Access the services:
+   - Keycloak Admin: http://localhost:8080/admin (admin/admin)
+   - OPA: http://localhost:8181
+   - API Gateway: http://localhost:8000
+
+### Authorization with OPA
+
+Authorization is handled by Open Policy Agent (OPA). Policies are defined in the `opa/policies` directory and are automatically loaded when starting the development environment.
+
+To test policies locally:
+
+```powershell
+.\scripts\test-opa-policies.ps1
+```
+
+See [opa/README.md](opa/README.md) for more details on policy development and testing.
 
 ### Frontend Quick Start
 

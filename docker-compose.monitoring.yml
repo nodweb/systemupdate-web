@@ -1,24 +1,146 @@
 version: '3.8'
 
+x-common-env: &common-env
+  TZ: ${TZ:-UTC}
+  # Disable analytics and update checks
+  GF_ANALYTICS_CHECK_FOR_UPDATES: 'false'
+  GF_ANALYTICS_REPORTING_ENABLED: 'false'
+  GF_SECURITY_ALLOW_EMBEDDING: 'true'
+
 services:
+  # Core monitoring
   prometheus:
     image: prom/prometheus:v2.53.0
+    container_name: prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-lifecycle'
     volumes:
-      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - ./monitoring/prometheus/rules:/etc/prometheus/rules:ro
+      - prometheus_data:/prometheus
+      - ./monitoring/prometheus:/etc/prometheus:ro
     ports:
       - "9090:9090"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9090/-/healthy || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   grafana:
     image: grafana/grafana:11.0.0
+    container_name: grafana
     environment:
-      - GF_AUTH_ANONYMOUS_ENABLED=true
-      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      <<: *common-env
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: 'false'
+      GF_AUTH_ANONYMOUS_ENABLED: 'true'
+      GF_AUTH_ANONYMOUS_ORG_ROLE: 'Admin'
+      GF_INSTALL_PLUGINS: 'grafana-clock-panel,grafana-simple-json-datasource'
     volumes:
-      - ./monitoring/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
-      - ./monitoring/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
-      - ./monitoring/grafana/dashboards/json:/etc/grafana/provisioning/dashboards/json:ro
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
     ports:
       - "3000:3000"
     depends_on:
-      - prometheus
+      prometheus:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Exporters
+  node-exporter:
+    image: prom/node-exporter:v1.7.0
+    container_name: node-exporter
+    command:
+      - '--path.rootfs=/host'
+      - '--no-collector.hwmon'
+      - '--collector.filesystem.ignored-mount-points=^/(sys|proc|dev|host|etc)($$|/)'
+    pid: host
+    volumes:
+      - /:/host:ro,rslave
+    ports:
+      - "9100:9100"
+    restart: unless-stopped
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.0
+    container_name: cadvisor
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    devices:
+      - /dev/kmsg:/dev/kmsg
+    privileged: true
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Metrics for Kong Gateway
+  kong-prometheus-exporter:
+    image: kong/prometheus-plugins:3.6.0.0
+    container_name: kong-prometheus-exporter
+    command: ["-scrape-uri", "http://kong:8001/metrics"]
+    ports:
+      - "9542:9542"
+    restart: unless-stopped
+    depends_on:
+      - kong
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9542/metrics"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # Redis exporter
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.59.0
+    container_name: redis-exporter
+    command: ["--redis.addr=redis://redis:6379"]
+    ports:
+      - "9121:9121"
+    restart: unless-stopped
+    depends_on:
+      - redis
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9121/-/healthy"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # Postgres exporter
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    container_name: postgres-exporter
+    environment:
+      DATA_SOURCE_NAME: "postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/postgres?sslmode=disable"
+    ports:
+      - "9187:9187"
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9187/metrics"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  prometheus_data:
+  grafana_data:

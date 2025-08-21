@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import time
 from contextlib import asynccontextmanager
 from typing import Any, Dict, List, Optional
 
@@ -51,10 +52,10 @@ except Exception:
 
 # Safe import for shared authorize client despite hyphen in directory name
 try:
-    from libs.shared_python.security.authorize_client import authorize as auth_authorize
-    from libs.shared_python.security.authorize_client import (
-        introspect as auth_introspect,
-    )  # type: ignore
+    from libs.shared_python.security.authorize_client import \
+      authorize as auth_authorize
+    from libs.shared_python.security.authorize_client import \
+      introspect as auth_introspect  # type: ignore
 except Exception:
     import importlib.util
     import pathlib
@@ -74,7 +75,8 @@ except Exception:
 
 # Optional OPA client
 try:
-    from libs.shared_python.security.opa_client import enforce as opa_enforce  # type: ignore
+    from libs.shared_python.security.opa_client import \
+      enforce as opa_enforce  # type: ignore
 except Exception:
     try:
         import importlib.util
@@ -97,7 +99,8 @@ except Exception:
 # Optional JWT verifier dependency
 DEPS_AUTH: list = []
 try:
-    from libs.shared_python.security.jwt_verifier import require_auth as _require_auth  # type: ignore
+    from libs.shared_python.security.jwt_verifier import \
+      require_auth as _require_auth  # type: ignore
 except Exception:
     try:
         import importlib.util
@@ -143,15 +146,12 @@ except Exception:
 
 # Optional structured logging integration (shared package) with safe fallback
 try:
-    from app.handlers.exception_handler import (
-        register_exception_handlers as _register_exception_handlers,
-    )
-    from app.middleware.context import (
-        setup_request_context_middleware as _setup_request_context_mw,
-    )
-    from app.middleware.logging_middleware import (
-        setup_logging_middleware as _setup_logging_mw,
-    )
+    from app.handlers.exception_handler import \
+      register_exception_handlers as _register_exception_handlers
+    from app.middleware.context import \
+      setup_request_context_middleware as _setup_request_context_mw
+    from app.middleware.logging_middleware import \
+      setup_logging_middleware as _setup_logging_mw
 except Exception:
     _setup_request_context_mw = None  # type: ignore
     _setup_logging_mw = None  # type: ignore
@@ -304,8 +304,10 @@ except Exception:
 # Always register middleware classes directly to ensure headers are injected
 try:
     # Try direct imports first
-    from app.middleware.context import RequestContextMiddleware as _ReqCtxMW  # type: ignore
-    from app.middleware.logging_middleware import RequestLoggingMiddleware as _ReqLogMW  # type: ignore
+    from app.middleware.context import \
+      RequestContextMiddleware as _ReqCtxMW  # type: ignore
+    from app.middleware.logging_middleware import \
+      RequestLoggingMiddleware as _ReqLogMW  # type: ignore
 except Exception:
     # Dynamic fallback from repo root
     try:
@@ -402,6 +404,7 @@ CONSUME_TOPICS = [
     for t in os.getenv("ANALYTICS_CONSUME_TOPICS", "device.ingest.raw").split(",")
     if t.strip()
 ]
+KAFKA_ENABLED = os.getenv("KAFKA_ENABLED", "false").lower() in {"1", "true", "yes"}
 _state: Dict[str, Any] = {}
 
 try:
@@ -439,25 +442,60 @@ async def _consume_loop():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
+    _t0 = time.monotonic()
     try:
-        # Skip external deps during pytest
-        if not os.environ.get("PYTEST_CURRENT_TEST") and CONSUME_ENABLED:
+        should_consume = (CONSUME_ENABLED or KAFKA_ENABLED) and not os.environ.get(
+            "PYTEST_CURRENT_TEST"
+        )
+        if should_consume:
             try:
                 _state["consumer_task"] = asyncio.create_task(_consume_loop())
                 LOGGER.info(
-                    "analytics consumer started for topics: %s",
-                    ",".join(CONSUME_TOPICS),
+                    "Service lifecycle event",
+                    extra={
+                        "event": "startup",
+                        "service": "analytics-service",
+                        "component": "kafka_consumer",
+                        "enabled": True,
+                        "topics": CONSUME_TOPICS,
+                    },
                 )
             except Exception:
                 LOGGER.exception("failed to start analytics consumer")
+        else:
+            LOGGER.info(
+                "Service lifecycle event",
+                extra={
+                    "event": "startup",
+                    "service": "analytics-service",
+                    "component": "kafka_consumer",
+                    "enabled": False,
+                    "topics": None,
+                },
+            )
     except Exception:
         LOGGER.exception("lifespan startup failed")
     yield
     # Shutdown
     try:
+        _t1 = time.monotonic()
         task = _state.get("consumer_task")
         if task:
             task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+        LOGGER.info(
+            "Service lifecycle event",
+            extra={
+                "event": "shutdown",
+                "service": "analytics-service",
+                "component": "kafka_consumer",
+                "status": "complete",
+                "duration_seconds": round(_t1 - _t0, 6),
+            },
+        )
     except Exception:
         LOGGER.exception("lifespan shutdown failed")
 

@@ -22,13 +22,43 @@ jobs:
       - name: Install jq and curl
         run: sudo apt-get update && sudo apt-get install -y jq curl
 
-      - name: Start infra (Postgres, Redis, Keycloak)
+      - name: Start infra (Postgres, Redis, Keycloak) [isolated]
         run: |
-          docker compose up -d postgres redis keycloak
-          # Wait for dependencies
-          for i in {1..60}; do curl -fsS http://localhost:5432 >/dev/null 2>&1 && break || sleep 1; done || true
-          for i in {1..60}; do curl -fsS http://localhost:6379 >/dev/null 2>&1 && break || sleep 1; done || true
-          for i in {1..90}; do curl -fsS http://localhost:8080/realms/master/.well-known/openid-configuration && break || sleep 2; done
+          set -e
+          docker compose -f docker-compose.yml --project-name ci-jwks up -d postgres redis keycloak
+          # Wait for Keycloak discovery to be up
+          for i in {1..120}; do curl -fsS http://localhost:8080/realms/master/.well-known/openid-configuration >/dev/null && break || sleep 2; done
+
+      - name: Compose config (inspect)
+        run: |
+          docker compose -f docker-compose.yml --project-name ci-jwks config | tee jwks-compose-config.txt
+
+      - name: Guard expected services only
+        run: |
+          services=$(docker compose -f docker-compose.yml --project-name ci-jwks config --services)
+          echo "Services in resolved config: $services"
+          for s in $services; do
+            case "$s" in
+              postgres|redis|keycloak|command-service) : ;;
+              *) echo "Unexpected service in JWKS smoke config: $s" && exit 1 ;;
+            esac
+          done
+
+      - name: Guard published host ports (avoid collisions)
+        run: |
+          # Extract published host ports from resolved config
+          docker compose -f docker-compose.yml --project-name ci-jwks config \
+            | awk '/^\s*ports:/ {inports=1; next} inports && /^\s*-\s*"?[0-9]+:[0-9]+/ {print $0} inports && NF==0 {inports=0}' \
+            | sed -E 's/.*-\s*"?([0-9]+):.*/\1/' > ports.txt
+          echo "Published host ports:"; cat ports.txt || true
+          allowed="5432 6379 8080 8004"
+          while read -r p; do
+            [ -z "$p" ] && continue
+            case " $allowed " in
+              *" $p "*) : ;;
+              *) echo "Unexpected published host port: $p (allowed: $allowed)" && exit 1 ;;
+            esac
+          done < ports.txt
 
       - name: Fetch realm discovery and token
         id: oidc
@@ -55,13 +85,13 @@ jobs:
                 OIDC_AUDIENCE: "systemupdate-api"
           YAML
 
-      - name: Start command-service with JWKS verification
+      - name: Start command-service with JWKS verification [isolated]
         env:
           JWKS_URL: ${{ steps.oidc.outputs.jwks_uri }}
           OIDC_ISSUER: ${{ steps.oidc.outputs.issuer }}
         run: |
-          docker compose -f docker-compose.yml -f ci.jwks.yml up -d command-service
-          for i in {1..60}; do curl -fsS http://localhost:8004/healthz && break || sleep 2; done
+          docker compose -f docker-compose.yml -f ci.jwks.yml --project-name ci-jwks up -d command-service
+          for i in {1..120}; do curl -fsS http://localhost:8004/healthz && break || sleep 2; done
 
       - name: Assert 401/200 on service with and without token
         env:
@@ -74,6 +104,21 @@ jobs:
           echo "with-token: $code_with_token"
           test "$code_with_token" = "200"
 
+      - name: Capture logs
+        if: always()
+        run: |
+          docker compose -f docker-compose.yml -f ci.jwks.yml --project-name ci-jwks ps || true
+          docker compose -f docker-compose.yml -f ci.jwks.yml --project-name ci-jwks logs --no-color > jwks-smoke-logs.txt || true
+
+      - name: Upload logs artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jwks-service-smoke-logs
+          path: |
+            jwks-compose-config.txt
+            jwks-smoke-logs.txt
+
       - name: Teardown
         if: always()
-        run: docker compose -f docker-compose.yml -f ci.jwks.yml down -v
+        run: docker compose -f docker-compose.yml -f ci.jwks.yml --project-name ci-jwks down -v

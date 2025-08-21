@@ -1,0 +1,49 @@
+name: observability-artifacts
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/observability-artifacts.yml'
+      - 'docker-compose.yml'
+      - 'observability/**'
+
+jobs:
+  observability-artifacts:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: List observability files (if any)
+        run: |
+          set -e
+          if [ -d observability ]; then
+            echo "observability directory present"
+            find observability -maxdepth 2 -type f -print || true
+          else
+            echo "observability directory not found; proceeding to promtool check with sample config"
+          fi
+
+      - name: Validate Prometheus config with promtool (if present)
+        run: |
+          if [ -f observability/prometheus.yml ]; then
+            docker run --rm -v "$PWD/observability:/etc/prometheus" prom/prometheus:v2.53.0 \
+              --config.file=/etc/prometheus/prometheus.yml --version >/dev/null 2>&1 || true
+            docker run --rm -v "$PWD/observability:/etc/prometheus" prom/prometheus:v2.53.0 \
+              --config.file=/etc/prometheus/prometheus.yml --web.enable-lifecycle --log.level=error --test.terminate
+            echo "Prometheus config seems valid"
+          else
+            echo "observability/prometheus.yml not found; skipping validation"
+          fi
+
+      - name: Archive observability assets
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: observability-assets
+          path: |
+            observability/**
+          if-no-files-found: ignore

@@ -1,6 +1,7 @@
-import socket
-import pytest
 import os
+import socket
+
+import pytest
 
 pytestmark = pytest.mark.docker
 
@@ -22,7 +23,7 @@ def test_kafka_is_reachable():
 @pytest.mark.docker
 def test_kafka_roundtrip_produce_consume():
     try:
-        from kafka import KafkaProducer, KafkaConsumer
+        from kafka import KafkaConsumer, KafkaProducer
     except Exception:
         pytest.skip("kafka-python not installed; skipping roundtrip")
 

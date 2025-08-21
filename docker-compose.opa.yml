@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  # OPA (Open Policy Agent)
+  opa:
+    image: openpolicyagent/opa:0.62.1
+    container_name: su-opa
+    command: [
+      "run",
+      "--server",
+      "--set=decision_logs.console=true"
+    ]
+    ports: ["8181:8181"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8181/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - ./opa/policies:/policies
+    profiles: ["dev", "policy"]
+
+volumes:
+  opa_policies:

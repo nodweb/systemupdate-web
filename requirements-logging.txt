@@ -1,0 +1,31 @@
+# Logging dependencies
+python-json-logger>=2.0.2  # JSON formatter for structured logging
+python-json-logger-ecs>=0.1.0  # ECS (Elastic Common Schema) formatter
+structlog>=21.1.0  # Structured logging for Python
+python-json-logger>=2.0.2  # JSON formatter for structured logging
+python-json-logger-ecs>=0.1.0  # ECS (Elastic Common Schema) formatter
+structlog>=21.1.0  # Structured logging for Python
+
+# Logging tools
+loguru>=0.6.0  # Alternative logging library with better performance
+sentry-sdk[fastapi]>=1.5.0  # Error tracking and monitoring
+
+# For log rotation
+logging-rotating-file-handler>=1.0.0  # Rotating file handler for logging
+
+# For async logging
+asyncio-log>=0.5.0  # Asynchronous logging
+
+# For log analysis
+python-logstash-async>=2.5.0  # Asynchronous logging handler for Logstash
+python-logstash>=0.4.6  # Logstash formatter for Python logging
+
+# For structured logging in tests
+pytest-cov>=2.12.0  # Coverage reporting for tests
+pytest-asyncio>=0.16.0  # Async support for pytest
+pytest-mock>=3.6.1  # Mocking for tests
+
+# For log formatting
+python-json-logger>=2.0.2  # JSON formatter for structured logging
+python-json-logger-ecs>=0.1.0  # ECS (Elastic Common Schema) formatter
+structlog>=21.1.0  # Structured logging for Python
