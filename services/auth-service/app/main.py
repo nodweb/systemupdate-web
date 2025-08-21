@@ -1,4 +1,7 @@
+import asyncio
+import logging
 import os
+from contextlib import asynccontextmanager
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException, status
@@ -7,6 +10,8 @@ from pydantic import BaseModel
 from .otel import init_tracing
 from .policy import authorize_action
 from .security import validate_jwt
+
+logger = logging.getLogger("auth-service")
 
 app = FastAPI(title="SystemUpdate Auth Service", version="0.1.0")
 
@@ -21,6 +26,115 @@ class HealthResponse(BaseModel):
 @app.get("/healthz", response_model=HealthResponse, tags=["health"])
 async def healthz() -> HealthResponse:
     return HealthResponse(status="ok")
+
+
+# Background worker controls
+AUTH_WORKER_ENABLED = os.getenv("AUTH_WORKER_ENABLED", "true").lower() in {
+    "1",
+    "true",
+    "yes",
+}
+_worker_task: asyncio.Task | None = None
+
+
+@app.get("/worker/status")
+def worker_status():
+    return {"running": bool(_worker_task is not None and not _worker_task.done())}
+
+
+def _in_pytest() -> bool:
+    return bool(os.environ.get("PYTEST_CURRENT_TEST"))
+
+
+async def _worker_loop():
+    try:
+        while True:
+            # Placeholder background maintenance work
+            await asyncio.sleep(60.0)
+    except asyncio.CancelledError:
+        raise
+
+
+async def _start_worker():
+    global _worker_task
+    if not AUTH_WORKER_ENABLED:
+        try:
+            logger.info(
+                "Service lifecycle event",
+                extra={
+                    "service": "auth-service",
+                    "event": "startup",
+                    "component": "worker",
+                    "enabled": False,
+                    "reason": "AUTH_WORKER_ENABLED=false",
+                },
+            )
+        except Exception:
+            pass
+        return
+    if _in_pytest():
+        try:
+            logger.info(
+                "Service lifecycle event",
+                extra={
+                    "service": "auth-service",
+                    "event": "startup",
+                    "component": "worker",
+                    "enabled": False,
+                    "reason": "pytest_gating_worker",
+                },
+            )
+        except Exception:
+            pass
+        return
+    _worker_task = asyncio.create_task(_worker_loop())
+    try:
+        logger.info(
+            "Service lifecycle event",
+            extra={
+                "service": "auth-service",
+                "event": "startup",
+                "component": "worker",
+                "enabled": True,
+            },
+        )
+    except Exception:
+        pass
+
+
+async def _stop_worker():
+    global _worker_task
+    if _worker_task is not None:
+        _worker_task.cancel()
+        try:
+            await _worker_task
+        except Exception:
+            pass
+        finally:
+            _worker_task = None
+        try:
+            logger.info(
+                "Service lifecycle event",
+                extra={
+                    "service": "auth-service",
+                    "event": "shutdown",
+                    "component": "worker",
+                },
+            )
+        except Exception:
+            pass
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    await _start_worker()
+    try:
+        yield
+    finally:
+        await _stop_worker()
+
+
+app.router.lifespan_context = lifespan
 
 
 # TODO: Replace with real OIDC validation (Keycloak) and RBAC/ABAC
