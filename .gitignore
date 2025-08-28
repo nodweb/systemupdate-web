@@ -1,0 +1,55 @@
+# OS/Editor
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+.venv/
+.venv*/
+.env*/
+.eggs/
+*.egg-info/
+.coverage
+.coverage.*
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node / Frontend
+frontend/node_modules/
+frontend/.pnpm-store/
+frontend/.yarn/
+frontend/.yarnrc.yml
+frontend/.npmrc
+frontend/.cache/
+frontend/.vite/
+frontend/dist/
+frontend/build/
+frontend/coverage/
+frontend/reports/npm-audit.json
+frontend/reports/depcheck.json
+
+# Logs
+*.log
+logs/
+
+# IDE
+.idea/
+.vscode/
+
+# Misc
+*.tmp
+*.bak
+*.orig
+
+# Docker/Compose local
+**/.local/**
+**/tmp/**
