@@ -1,204 +1,205 @@
-# SystemUpdate-Web Monorepo
+﻿# ðŸŒ SystemUpdate Web Dashboard
 
-<!-- markdownlint-disable MD013 MD032 -->
+> IMPORTANT: This legacy Flask + React dashboard is deprecated.
+>
+> - Active web implementation lives at `SystemUpdate/systemupdate-web/` (FastAPI microservices + Kong gateway).
+> - Use docs there: `systemupdate-web/docs/SYSTEMUPDATE_WEB_ARCHITECTURE.md` and `systemupdate-web/docs/ROADMAP.md`.
+> - Gateway is Kong (DB-less). Any Traefik mentions below are legacy and should be ignored.
 
-[![Python CI](https://github.com/nodweb/systemupdate-web/actions/workflows/python-ci.yml/badge.svg)](https://github.com/nodweb/systemupdate-web/actions/workflows/python-ci.yml)
-[![SBOM & Security](https://github.com/nodweb/systemupdate-web/actions/workflows/sbom-security.yml/badge.svg)](https://github.com/nodweb/systemupdate-web/actions/workflows/sbom-security.yml)
-[![Python Codegen](https://github.com/nodweb/systemupdate-web/actions/workflows/codegen-python.yml/badge.svg)](https://github.com/nodweb/systemupdate-web/actions/workflows/codegen-python.yml)
-[![Markdown Lint](https://github.com/nodweb/systemupdate-web/actions/workflows/markdownlint.yml/badge.svg)](https://github.com/nodweb/systemupdate-web/actions/workflows/markdownlint.yml)
-[![Python Lint](https://github.com/nodweb/systemupdate-web/actions/workflows/python-lint.yml/badge.svg)](https://github.com/nodweb/systemupdate-web/actions/workflows/python-lint.yml)
-[![TS Lint](https://github.com/nodweb/systemupdate-web/actions/workflows/ts-lint.yml/badge.svg)](https://github.com/nodweb/systemupdate-web/actions/workflows/ts-lint.yml)
-[![Frontend CI/Lint](https://github.com/nodweb/systemupdate-web/actions/workflows/frontend-lint.yml/badge.svg)](https://github.com/nodweb/systemupdate-web/actions/workflows/frontend-lint.yml)
-[![Schemas Validate](https://github.com/nodweb/systemupdate-web/actions/workflows/schemas-validate.yml/badge.svg)](https://github.com/nodweb/systemupdate-web/actions/workflows/schemas-validate.yml)
-[![Proto Validate](https://github.com/nodweb/systemupdate-web/actions/workflows/proto-validate.yml/badge.svg)](https://github.com/nodweb/systemupdate-web/actions/workflows/proto-validate.yml)
-[![CodeQL](https://github.com/nodweb/systemupdate-web/actions/workflows/codeql.yml/badge.svg)](https://github.com/nodweb/systemupdate-web/actions/workflows/codeql.yml)
-[![Secret Scan](https://github.com/nodweb/systemupdate-web/actions/workflows/secrets.yml/badge.svg)](https://github.com/nodweb/systemupdate-web/actions/workflows/secrets.yml)
+## ðŸ“‹ Ø®Ù„Ø§ØµÙ‡ Ù¾Ø±ÙˆÚ˜Ù‡
 
-Enterprise-grade web stack for remote Android device management.
+SystemUpdate Web Dashboard ÛŒÚ© Ø¯Ø§Ø´Ø¨ÙˆØ±Ø¯ Ø­Ø±ÙÙ‡â€ŒØ§ÛŒ Ùˆ real-time Ø¨Ø±Ø§ÛŒ Ú©Ù†ØªØ±Ù„ Ùˆ monitoring Ø¯Ø³ØªÚ¯Ø§Ù‡â€ŒÙ‡Ø§ÛŒ Ø§Ù†Ø¯Ø±ÙˆÛŒØ¯ Ø§Ø³Øª. Ø§ÛŒÙ† Ù¾Ø±ÙˆÚ˜Ù‡ Ø´Ø§Ù…Ù„ Backend Ø¨Ø§ Flask Ùˆ Frontend Ø¨Ø§ React Ø§Ø³Øª.
 
-- Architecture: see `docs/SYSTEMUPDATE_WEB_ARCHITECTURE.md`
-- Phases: 2 (Backend), 3 (Frontend), 4 (Infra)
+---
 
-## Docs
+## ðŸ—ï¸ Ù…Ø¹Ù…Ø§Ø±ÛŒ Ù¾Ø±ÙˆÚ˜Ù‡
 
-- Command events: `docs/EVENTS.md`
-- Idempotency usage: `docs/IDEMPOTENCY.md`
+```text
+SystemUpdate-Web/
+â”œâ”€â”€ backend/                 # Flask Backend
+â”‚   â”œâ”€â”€ app/
+â”‚   â”‚   â”œâ”€â”€ __init__.py      # Flask app factory
+â”‚   â”‚   â”œâ”€â”€ models/          # Database models
+â”‚   â”‚   â”œâ”€â”€ routes/          # API endpoints
+â”‚   â”‚   â”œâ”€â”€ services/        # Business logic
+â”‚   â”‚   â””â”€â”€ utils/           # Helper functions
+â”‚   â”œâ”€â”€ requirements.txt
+â”‚   â”œâ”€â”€ gunicorn.conf.py
+â”‚   â””â”€â”€ run.py
+â”œâ”€â”€ frontend/                # React Frontend
+â”‚   â”œâ”€â”€ src/
+â”‚   â”‚   â”œâ”€â”€ components/      # React components
+â”‚   â”‚   â”œâ”€â”€ pages/           # Dashboard pages
+â”‚   â”‚   â”œâ”€â”€ hooks/           # Custom hooks
+â”‚   â”‚   â”œâ”€â”€ services/        # API calls
+â”‚   â”‚   â””â”€â”€ utils/           # Helper functions
+â”‚   â”œâ”€â”€ package.json
+â”‚   â””â”€â”€ public/
+â”œâ”€â”€ database/                # Database migrations
+â”œâ”€â”€ logs/                    # Application logs
+â””â”€â”€ backups/                 # Backup files
+```
 
-## Getting Started (M0)
+---
 
-- Local dev via Docker Compose (to be added in M0)
-- CI: GitHub Actions (lint/test/build) (placeholder)
+## ðŸš€ Ø±Ø§Ù‡â€ŒØ§Ù†Ø¯Ø§Ø²ÛŒ Ø³Ø±ÛŒØ¹
 
-### Frontend Quick Start
-
-From `systemupdate-web/frontend/`:
+### **Backend Setup:**
 
 ```bash
+cd backend
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
+python run.py
+```
+
+### **Frontend Setup:**
+
+```bash
+cd frontend
 npm install
-npm run dev
+npm start
 ```
 
-Build/typecheck/lint in CI via `frontend-ci.yml`.
+---
 
-Local scripts:
+## ðŸ”§ ÙˆÛŒÚ˜Ú¯ÛŒâ€ŒÙ‡Ø§ÛŒ Ú©Ù„ÛŒØ¯ÛŒ
+
+### **Backend Features:**
+
+```markdown
+- âœ… Flask API Ø¨Ø§ WebSocket support
+- âœ… PostgreSQL database
+- âœ… Redis caching
+- âœ… JWT authentication
+- âœ… Real-time device monitoring
+- âœ… Data encryption/decryption
+- âœ… Command execution
+- âœ… Analytics and reporting
+```
+
+### **Frontend Features:**
+
+```markdown
+- âœ… React + TypeScript
+- âœ… Material-UI components
+- âœ… Real-time updates
+- âœ… Device management
+- âœ… Data visualization
+- âœ… Command interface
+- âœ… Analytics dashboard
+```
+
+---
+
+## ðŸ“Š API Endpoints
+
+### **Authentication:**
+
+```text
+POST   /api/auth/login
+POST   /api/auth/logout
+POST   /api/auth/refresh
+```
+
+### **Devices:**
+
+```text
+GET    /api/devices              # Ø¯Ø±ÛŒØ§ÙØª Ù„ÛŒØ³Øª Ø¯Ø³ØªÚ¯Ø§Ù‡â€ŒÙ‡Ø§
+GET    /api/device/<id>          # Ø¯Ø±ÛŒØ§ÙØª Ø§Ø·Ù„Ø§Ø¹Ø§Øª Ø¯Ø³ØªÚ¯Ø§Ù‡
+POST   /api/device/<id>/command  # Ø§Ø±Ø³Ø§Ù„ Ø¯Ø³ØªÙˆØ± Ø¨Ù‡ Ø¯Ø³ØªÚ¯Ø§Ù‡
+GET    /api/device/<id>/data     # Ø¯Ø±ÛŒØ§ÙØª Ø¯Ø§Ø¯Ù‡â€ŒÙ‡Ø§ÛŒ Ø¯Ø³ØªÚ¯Ø§Ù‡
+```
+
+### **Analytics:**
+
+```text
+GET    /api/analytics/overview   # Ø®Ù„Ø§ØµÙ‡ ØªØ­Ù„ÛŒÙ„ÛŒ
+GET    /api/analytics/devices    # Ø¢Ù…Ø§Ø± Ø¯Ø³ØªÚ¯Ø§Ù‡â€ŒÙ‡Ø§
+GET    /api/analytics/security   # Ú¯Ø²Ø§Ø±Ø´â€ŒÙ‡Ø§ÛŒ Ø§Ù…Ù†ÛŒØªÛŒ
+```
+
+### **WebSocket Events:**
+
+```text
+device_connected                 # Ø§ØªØµØ§Ù„ Ø¯Ø³ØªÚ¯Ø§Ù‡ Ø¬Ø¯ÛŒØ¯
+data_received                   # Ø¯Ø±ÛŒØ§ÙØª Ø¯Ø§Ø¯Ù‡ Ø¬Ø¯ÛŒØ¯
+command_result                  # Ù†ØªÛŒØ¬Ù‡ Ø§Ø¬Ø±Ø§ÛŒ Ø¯Ø³ØªÙˆØ±
+device_update                   # Ø¨Ø±ÙˆØ²Ø±Ø³Ø§Ù†ÛŒ ÙˆØ¶Ø¹ÛŒØª Ø¯Ø³ØªÚ¯Ø§Ù‡
+```
+
+---
+
+## ðŸ”’ Ø§Ù…Ù†ÛŒØª
+
+- âœ… JWT authentication
+- âœ… HTTPS/SSL
+- âœ… Data encryption
+- âœ… Rate limiting
+- âœ… Input validation
+- âœ… SQL injection protection
+- âœ… XSS protection
+
+---
+
+## ðŸ“ˆ Performance
+
+- âœ… Redis caching
+- âœ… Database optimization
+- âœ… Connection pooling
+- âœ… Async operations
+- âœ… Real-time updates
+- âœ… Efficient data transfer
+
+---
+
+## ðŸ§ª ØªØ³Øªâ€ŒÙ‡Ø§
+
+### **Backend Tests:**
 
 ```bash
-npm run typecheck
-npm run lint
-npm run format:check
+cd backend
+python -m pytest tests/
 ```
 
-CI workflow for frontend lint/typecheck: `.github/workflows/frontend-lint.yml`.
-
-### Dev Gateway & Proxy
-
-- See `docs/DEV_GATEWAY.md` for Traefik routing (`/api/*`) and Vite proxy usage with curl examples.
-
-## Schemas (Contracts)
-
-- Location: `libs/proto-schemas/`
-  - Avro: `libs/proto-schemas/avro/`
-  - Protobuf: `libs/proto-schemas/proto/`
-- CI Validation:
-  - Avro: `.github/workflows/schemas-validate.yml` (fastavro)
-  - Protobuf: `.github/workflows/proto-validate.yml` (protoc)
-  - Note: Local Schema Registry available via Compose at `http://localhost:8081` (Confluent)
-
-### Codegen
-
-- CI codegen (artifacts only): `.github/workflows/proto-codegen.yml`
-  - TS types → `generated/ts/`
-  - Python types → `generated/python/`
-  - Artifact name: `proto-generated-types`
-- Local codegen (from `systemupdate-web/`):
+### **Frontend Tests:**
 
 ```bash
-# prerequisites
-# - protoc installed on PATH
-# - Node 18/20 and ts-proto installed globally: npm i -g ts-proto
-python scripts/codegen/proto_codegen.py
+cd frontend
+npm test
 ```
 
-Fetch CI artifact locally (from `systemupdate-web/`):
+---
+
+## ðŸš€ Deployment
+
+### **Production Setup:**
 
 ```bash
-# env vars required:
-#   GH_REPO=nodweb/systemupdate-web
-#   GH_TOKEN=<your token with repo read>
-python scripts/codegen/fetch_codegen_artifact.py
-# outputs extracted into generated/
+# Backend
+gunicorn -c gunicorn.conf.py run:app
+
+# Frontend
+npm run build
 ```
 
-Client scaffolds:
-- TS: `libs/client-ts/` (readme only; use outputs in `generated/ts`)
-- Python: `libs/client-py/` (readme only; use outputs in `generated/python`)
+### **Docker:**
 
-## Kafka / Testcontainers Notes
-
-- Some integration tests use Testcontainers and require Docker running.
-- Example tests (data-ingest-service):
-  - `tests/test_kafka_integration.py` (produce/consume bytes)
-  - `tests/test_kafka_avro_roundtrip.py` (Avro schemaless encode/decode via `fastavro`)
-- Toggle skip via env: `DOCKER_AVAILABLE=0` to skip on limited runners.
-
-## Local Services (Compose)
-
-- Postgres: `localhost:5432` (user/pass/db: systemupdate)
-- Redis: `localhost:6379`
-- Kafka: `localhost:9092` (Bitnami)
-- Schema Registry: `http://localhost:8081` (Confluent)
-- MinIO: `http://localhost:9000` (console: `http://localhost:9001`, user/pass: minioadmin)
-
-All have basic healthchecks; see `docker-compose.yml` for details.
-
-## Observability (OTel + Prometheus + Grafana)
-
-- Components:
-  - OpenTelemetry Collector: OTLP gRPC `localhost:4317`, OTLP HTTP `localhost:4318`
-  - Prometheus: `http://localhost:9090` (scrapes OTel Collector metrics at `otel-collector:8889`)
-  - Grafana: `http://localhost:3000` (admin/admin by default)
-- Collector config: `observability/otel-collector-config.yaml`
-- Prometheus config: `observability/prometheus.yml`
-
-Quickstart (from `systemupdate-web/`):
-
-```powershell
-docker compose up -d otel-collector prometheus grafana
+```bash
+docker-compose up -d
 ```
 
-Next, configure backend services to export OTLP traces/metrics to the collector. Defaults can point to `otel-collector:4317` (gRPC) or `:4318` (HTTP) inside Compose.
+---
 
-## Quality Gates
+## ðŸ“š Ù…Ø³ØªÙ†Ø¯Ø§Øª
 
-- Linters & Formatters: ruff + ruff-format + isort, ESLint + Prettier
-- Type Checking: mypy (strict-ish), TS strict mode (noImplicitAny, exactOptional, uncheckedIndex)
-- Pre-commit: `.pre-commit-config.yaml` available; run `pre-commit install`
-- Container Security: Trivy configured with `.trivyignore` (policy-based ignores, thresholds TBD)
-- SBOM: Generated; signing (Cosign) wiring prepared in CI (to be enabled)
+- [API Documentation](docs/API.md)
+- [Database Schema](docs/DATABASE.md)
+- [Security Guide](docs/SECURITY.md)
+- [Deployment Guide](docs/DEPLOYMENT.md)
 
-## Backend APIs (M0/M1)
+---
 
-### Command Service (`services/command-service`)
+**ðŸŽ¯ Ù¾Ø±ÙˆÚ˜Ù‡ Ø¢Ù…Ø§Ø¯Ù‡ Ø¨Ø±Ø§ÛŒ development Ùˆ production deployment!**
 
-- `GET /healthz`
-- `POST /commands` → create command (in-memory store)
-- `GET /commands` → list commands
-- `GET /commands/{id}` → get one
-
-Env:
-- `KAFKA_BOOTSTRAP` (default `kafka:9092`)
-- `COMMAND_EVENTS_TOPIC` (default `command.events`)
-
-Notes:
-- Simple Outbox queue + background Kafka publisher (aiokafka). If `aiokafka` not available, events are drained no-op.
-- Optional OpenTelemetry tracing to console if `opentelemetry-sdk` present.
-
-### Data Ingest Service (`services/data-ingest-service`)
-
-- `GET /healthz`
-- `POST /ingest` → accepts JSON and (optionally) publishes to Kafka
-- `WS /ws/ingest` → accepts JSON messages over WebSocket and (optionally) publishes to Kafka
-
-Env:
-- `KAFKA_BOOTSTRAP` (default `kafka:9092`)
-- `INGEST_TOPIC` (default `device.ingest.raw`)
-
-## Quick Local Testing
-
-- Aggregate tests from repo root (using auth-service venv Python):
-
-```powershell
-services\auth-service\.venv\Scripts\python -m pytest -q
-```
-
-- Per-service quick run:
-
-```powershell
-# Auth Service
-$env:PYTHONPATH='.'; pushd services/auth-service; .\.venv\Scripts\pytest -q; popd
-
-# Device Service
-$env:PYTHONPATH='.'; pushd services/device-service; .\.venv\Scripts\pytest -q; popd
-
-# WS Hub
-$env:PYTHONPATH='.'; pushd services/ws-hub; .\.venv\Scripts\pytest -q; popd
-```
-
-More details: `docs/TEST_GUIDE.md`.
-
-## Gateway (Traefik) Notes
-
-- Static config: `traefik/traefik.yml` (loads dynamic from `/etc/traefik/dynamic`)
-- Dynamic sample routes/services: `traefik/dynamic/sample.yml`
-- In Compose prod, Traefik mounts `traefik/dynamic/` to `/etc/traefik/dynamic`.
-
-## Milestones
-
-- M0: Scaffold + CI + local dev
-- M1: Auth + API Gateway + Device + WS Hub v1
-- M2: Command + Android integration + Outbox
-- M3: Data Ingest + Analytics minimal
-- M4: Notifications + OPA + Audit
-- M5: Scale-out + Canary + Load/Chaos
-
-<!-- markdownlint-enable MD013 MD032 -->
